@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 class ApiService {
-  static const String serverUrl = "http://192.168.1.4:8000/analyze";
+  static const String serverUrl = "http://192.168.1.13:8000/analyze";
 
   static Future<String?> uploadImage(CameraController controller) async {
     try {
