@@ -1,16 +1,7 @@
-<<<<<<< HEAD
 pillow
 pytesseract
 pdf2image
 easyocr
 opencv-python-headless
 numpy
-=======
-pillow
-pytesseract
-pdf2image
-easyocr
-opencv-python-headless
-numpy
->>>>>>> 03f0c7425d272c5176bfeea8a1e166ab5170faaf
 flask
