@@ -1,18 +1,13 @@
 def generate_first_sentence(scene):
-
     parts = []
 
     if scene["people"] > 0:
-        if scene["people"] == 1:
-            parts.append("one person")
-        else:
-            parts.append(f"{scene['people']} people")
+        parts.append("one person" if scene["people"] == 1 else f"{scene['people']} people")
 
     for obj in scene["objects"]:
         label = obj["label"]
         color = obj.get("color", "")
-        text = f"{color} {label}" if color else label
-        parts.append(text)
+        parts.append(f"{color} {label}".strip())
 
     if not parts:
         return "No clear objects are detected ahead."

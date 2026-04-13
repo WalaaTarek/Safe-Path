@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:safepath/screens/camera_screen.dart' ;
+import 'package:camera/camera.dart';
+import 'Screens/camera_screen.dart';
 
-void main() {
-  runApp(const MyApp());
+List<CameraDescription> cameras = [];
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  cameras = await availableCameras();
+  runApp(const BlindAssistApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class BlindAssistApp extends StatelessWidget {
+  const BlindAssistApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Safe Path Camera Test',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const CameraScreen(),
+      debugShowCheckedModeBanner: false,
+      home: CameraScreen(cameras: cameras),
     );
   }
 }

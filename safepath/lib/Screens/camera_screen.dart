@@ -1,90 +1,158 @@
+import 'dart:convert';
 import 'dart:async';
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:safepath/services/api_service.dart';
+import 'package:camera/camera.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_tts/flutter_tts.dart';
 
 class CameraScreen extends StatefulWidget {
-  const CameraScreen({super.key});
+  final List<CameraDescription> cameras;
+
+  const CameraScreen({super.key, required this.cameras});
 
   @override
   State<CameraScreen> createState() => _CameraScreenState();
 }
 
 class _CameraScreenState extends State<CameraScreen> {
-  CameraController? _controller;
-  Timer? _timer;
-  String description = "Waiting for analysis...";
+  late CameraController controller;
+
+  FlutterTts flutterTts = FlutterTts();
+
+  String description = "";
+  bool isProcessing = false;
+
+  Timer? timer;
+
+ 
+  String lastSpoken = "";
+  bool isSpeaking = false;
 
   @override
   void initState() {
     super.initState();
     initCamera();
+
+    flutterTts.setLanguage('en-US');
+    flutterTts.setSpeechRate(0.5);
+    flutterTts.setVolume(1.0);
+    flutterTts.setPitch(1.0);
+
+    flutterTts.setQueueMode(0);
+
+    flutterTts.setCompletionHandler(() {
+      isSpeaking = false;
+    });
+
+    timer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!isProcessing) {
+        detect();
+      }
+    });
   }
 
   Future<void> initCamera() async {
-    final cameras = await availableCameras();
-    final camera = cameras.first;
-
-    _controller = CameraController(
-      camera,
+    controller = CameraController(
+      widget.cameras.first,
       ResolutionPreset.medium,
       enableAudio: false,
     );
 
-    try {
-      await _controller!.initialize();
-      setState(() {});
+    await controller.initialize();
 
-      _timer = Timer.periodic(const Duration(seconds: 5), (_) {
-        captureAndSend();
-      });
-    } catch (e) {
-      print("Camera Error: $e");
-    }
+    if (!mounted) return;
+    setState(() {});
   }
 
-  Future<void> captureAndSend() async {
-    if (!_controller!.value.isInitialized) return;
+  Future<void> detect() async {
+    if (!controller.value.isInitialized) return;
 
-    final result = await ApiService.uploadImage(_controller!);
+    try {
+      isProcessing = true;
 
-    setState(() {
-      description = result ?? "No objects detected";
-    });
+      final file = await controller.takePicture();
+      final bytes = await file.readAsBytes();
+
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('http://192.168.1.3:8000/detect'),
+      );
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: 'frame.jpg',
+        ),
+      );
+
+      var response = await request.send();
+      var resStr = await response.stream.bytesToString();
+
+      var jsonRes = jsonDecode(resStr);
+
+      String newDescription =
+          jsonRes['description'] ?? "No description available";
+
+      print("DESCRIPTION: $newDescription");
+
+      setState(() {
+        description = newDescription;
+      });
+
+ 
+      if (newDescription.isNotEmpty &&
+          newDescription != lastSpoken &&
+          !isSpeaking) {
+
+        lastSpoken = newDescription;
+        isSpeaking = true;
+
+        await flutterTts.speak(newDescription);
+      }
+
+    } catch (e) {
+      print("ERROR: $e");
+    }
+
+    isProcessing = false;
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
-    _controller?.dispose();
+    timer?.cancel();
+    controller.dispose();
+    flutterTts.stop();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_controller == null || !_controller!.value.isInitialized) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (!controller.value.isInitialized) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
 
     return Scaffold(
+      appBar: AppBar(title: const Text("Blind Assist")),
+
       body: Stack(
         children: [
-          Positioned.fill(child: CameraPreview(_controller!)),
+          CameraPreview(controller),
+
           Positioned(
-            bottom: 40,
+            bottom: 20,
             left: 20,
             right: 20,
             child: Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(12),
               color: Colors.black54,
               child: Text(
-                description.isEmpty ? "Detecting..." : description,
-                style: const TextStyle(
-                  fontSize: 16,
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
+                description.isEmpty
+                    ? "No scene detected"
+                    : description,
+                style: const TextStyle(color: Colors.white),
               ),
             ),
           ),
