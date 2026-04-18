@@ -37,9 +37,9 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 
 ## Requirements for ocr-project
 
-### Install Python packages
+### Install Python packages 
 
-pip install -r requirements.txt
+pip install pillow pytesseract pdf2image easyocr opencv-python-headless numpy flask requests
 
 ### Install Tesseract
 
