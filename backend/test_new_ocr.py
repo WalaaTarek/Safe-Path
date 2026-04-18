@@ -59,13 +59,23 @@ def clean_text(text):
     return "\n".join(cleaned)
 
 def smart_image_reader(path):
-    easy_text = clean_text(read_image_easy(path))
+    try:
+        easy_text = read_image_easy(path)
+        easy_text = clean_text(easy_text)
 
-    if len(easy_text) > 20:
-        return easy_text
+        if easy_text and len(easy_text.strip()) > 10:
+            return easy_text
+    except Exception as e:
+        print("EasyOCR failed:", e)
 
-    tess_text = clean_text(read_image_tesseract(path))
-    return tess_text
+    try:
+        tess_text = read_image_tesseract(path)
+        tess_text = clean_text(tess_text)
+        return tess_text
+    except Exception as e:
+        print("Tesseract failed:", e)
+
+    return "❌ Could not read text"
 
 # ====== PDF ======
 def read_pdf(path):
