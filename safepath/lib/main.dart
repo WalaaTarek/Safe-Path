@@ -7,11 +7,11 @@ List<CameraDescription> cameras = [];
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   cameras = await availableCameras();
-  runApp(const BlindAssistApp());
+  runApp(const MyApp());
 }
 
-class BlindAssistApp extends StatelessWidget {
-  const BlindAssistApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {

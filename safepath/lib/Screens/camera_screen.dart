@@ -14,40 +14,43 @@ class CameraScreen extends StatefulWidget {
   State<CameraScreen> createState() => _CameraScreenState();
 }
 
-class _CameraScreenState extends State<CameraScreen> {
-  late CameraController controller;
+class _CameraScreenState extends State<CameraScreen>
+    with WidgetsBindingObserver {
 
+  late CameraController controller;
   FlutterTts flutterTts = FlutterTts();
 
   String description = "";
+
   bool isProcessing = false;
+  bool isSpeaking = false;
+
+  String lastSpoken = "";
 
   Timer? timer;
-
- 
-  String lastSpoken = "";
-  bool isSpeaking = false;
+  bool isDetectLoopRunning = false;
 
   @override
   void initState() {
     super.initState();
+
+    WidgetsBinding.instance.addObserver(this);
+
     initCamera();
 
+    initTts();
+
+    startDetectionLoop();
+  }
+
+  void initTts() {
     flutterTts.setLanguage('en-US');
     flutterTts.setSpeechRate(0.5);
     flutterTts.setVolume(1.0);
     flutterTts.setPitch(1.0);
 
-    flutterTts.setQueueMode(0);
-
     flutterTts.setCompletionHandler(() {
       isSpeaking = false;
-    });
-
-    timer = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (!isProcessing) {
-        detect();
-      }
     });
   }
 
@@ -61,11 +64,42 @@ class _CameraScreenState extends State<CameraScreen> {
     await controller.initialize();
 
     if (!mounted) return;
+
     setState(() {});
   }
 
-  Future<void> detect() async {
+  void startDetectionLoop() {
+    if (isDetectLoopRunning) return;
+
+    isDetectLoopRunning = true;
+
+    Future.doWhile(() async {
+      if (!mounted) return false;
+
+      await detect();
+
+      await Future.delayed(const Duration(seconds: 4));
+
+      return true; // keep loop running
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!controller.value.isInitialized) return;
+
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
+      controller.dispose();
+    } else if (state == AppLifecycleState.resumed) {
+      initCamera();
+    }
+  }
+
+  Future<void> detect() async {
+    if (isProcessing) return;
+    if (!controller.value.isInitialized ||
+        controller.value.isTakingPicture) return;
 
     try {
       isProcessing = true;
@@ -75,7 +109,7 @@ class _CameraScreenState extends State<CameraScreen> {
 
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('http://192.168.1.3:8000/detect'),
+        Uri.parse('http://192.168.1.11:8000/detect'),
       );
 
       request.files.add(
@@ -94,13 +128,14 @@ class _CameraScreenState extends State<CameraScreen> {
       String newDescription =
           jsonRes['description'] ?? "No description available";
 
-      print("DESCRIPTION: $newDescription");
+      if (!mounted) return;
 
       setState(() {
         description = newDescription;
       });
 
- 
+      print("DESCRIPTION: $newDescription");
+
       if (newDescription.isNotEmpty &&
           newDescription != lastSpoken &&
           !isSpeaking) {
@@ -108,14 +143,15 @@ class _CameraScreenState extends State<CameraScreen> {
         lastSpoken = newDescription;
         isSpeaking = true;
 
+        await flutterTts.stop(); 
         await flutterTts.speak(newDescription);
       }
 
     } catch (e) {
       print("ERROR: $e");
+    } finally {
+      isProcessing = false;
     }
-
-    isProcessing = false;
   }
 
   @override
@@ -123,6 +159,7 @@ class _CameraScreenState extends State<CameraScreen> {
     timer?.cancel();
     controller.dispose();
     flutterTts.stop();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
