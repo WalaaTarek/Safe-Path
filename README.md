@@ -61,3 +61,25 @@ venv\Scripts\activate
 
 pip install -r requirements.txt
 python test_ocr.py
+##
+## Requirements for money
+
+## 2. Update the Server URL in the App
+
+Open the file that contains the server URL (Safe-path/safepath/lib/services/api_service_coins.dart) and edit the line:
+
+```cmd
+static const String Url = "http://<YOUR_IP>:8000/analyze";
+```
+
+Replace <YOUR_IP> with your IP address
+## 3. Run the Server
+
+Open the terminal, navigate to the server folder (backend) and run:
+
+- **Windows**:
+
+```cmd
+cd backend
+python app.py
+```

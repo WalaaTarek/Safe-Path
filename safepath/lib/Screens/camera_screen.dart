@@ -125,7 +125,6 @@ class _CameraScreenState extends State<CameraScreen>
     }
   }
 
-  
   void startYoloDetectionLoop() {
     if (isDetectLoopRunning) return;
     isDetectLoopRunning = true;
@@ -148,8 +147,8 @@ class _CameraScreenState extends State<CameraScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!controller.value.isInitialized) return;
- if (state == AppLifecycleState.inactive ||
-      state == AppLifecycleState.paused) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
       controller.stopImageStream();
       controller.dispose();
       flutterTts.stop();
@@ -213,7 +212,7 @@ class _CameraScreenState extends State<CameraScreen>
 
     if (newResponseType == "high_danger") {
       if (_lastHighDangerSpoken == null ||
-          DateTime.now().difference(_lastHighDangerSpoken!).inSeconds >= 5) {
+          DateTime.now().difference(_lastHighDangerSpoken!).inSeconds >= 4) {
         _lastHighDangerSpoken = DateTime.now();
         return true;
       }
