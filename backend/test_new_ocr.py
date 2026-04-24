@@ -41,7 +41,6 @@ def read_image_tesseract(path):
     )
 
 def clean_text(text):
-    # حذف الرموز الغريبة
     text = re.sub(r'[^\u0600-\u06FFa-zA-Z0-9\s\n.,!?]', '', text)
 
     lines = text.split("\n")

@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:camera/camera.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:vibration/vibration.dart';
 
 class CameraScreen extends StatefulWidget {
   final List<CameraDescription> cameras;
@@ -16,31 +19,34 @@ class CameraScreen extends StatefulWidget {
 
 class _CameraScreenState extends State<CameraScreen>
     with WidgetsBindingObserver {
-
   late CameraController controller;
-  FlutterTts flutterTts = FlutterTts();
+  final FlutterTts flutterTts = FlutterTts();
 
   String description = "";
+  String responseType = "clear";
 
   bool isProcessing = false;
   bool isSpeaking = false;
-
-  String lastSpoken = "";
-
-  Timer? timer;
   bool isDetectLoopRunning = false;
+
+  double? _lastBrightness;
+
+  DateTime? _lastProximityAlert;
+
+  static const double _brightnessThreshold = 30.0;
+
+  static const int _proximityAlertCooldownSeconds = 1;
+  DateTime? _lastHighDangerSpoken;
+
+  static const int _normalIntervalSeconds = 4;
+  static const int _dangerIntervalSeconds = 2;
 
   @override
   void initState() {
     super.initState();
-
     WidgetsBinding.instance.addObserver(this);
-
     initCamera();
-
     initTts();
-
-    startDetectionLoop();
   }
 
   void initTts() {
@@ -59,6 +65,7 @@ class _CameraScreenState extends State<CameraScreen>
       widget.cameras.first,
       ResolutionPreset.medium,
       enableAudio: false,
+      imageFormatGroup: ImageFormatGroup.yuv420,
     );
 
     await controller.initialize();
@@ -66,89 +73,224 @@ class _CameraScreenState extends State<CameraScreen>
     if (!mounted) return;
 
     setState(() {});
+
+    startProximityDetection();
+
+    startYoloDetectionLoop();
   }
 
-  void startDetectionLoop() {
-    if (isDetectLoopRunning) return;
+  void startProximityDetection() {
+    controller.startImageStream((CameraImage image) {
+      _processFrameLocally(image);
+    });
+  }
 
+  void _processFrameLocally(CameraImage image) {
+    try {
+      final Uint8List yPlane = image.planes[0].bytes;
+      int total = 0;
+      const int step = 10;
+      int count = 0;
+      for (int i = 0; i < yPlane.length; i += step) {
+        total += yPlane[i];
+        count++;
+      }
+      double currentBrightness = total / count;
+
+      if (_lastBrightness != null) {
+        double diff = (currentBrightness - _lastBrightness!).abs();
+        if (diff > _brightnessThreshold) {
+          _triggerProximityAlert();
+        }
+      }
+
+      _lastBrightness = currentBrightness;
+    } catch (e) {
+      print("Error processing frame for proximity: $e");
+    }
+  }
+
+  void _triggerProximityAlert() {
+    if (_lastProximityAlert != null) {
+      int diff = DateTime.now().difference(_lastProximityAlert!).inSeconds;
+      if (diff < _proximityAlertCooldownSeconds) return;
+    }
+
+    _lastProximityAlert = DateTime.now();
+
+    _vibrateHighDanger();
+
+    if (!isSpeaking) {
+      _speakImmediate("Watch out! Something is very close!", "high_danger");
+    }
+  }
+
+  
+  void startYoloDetectionLoop() {
+    if (isDetectLoopRunning) return;
     isDetectLoopRunning = true;
 
     Future.doWhile(() async {
       if (!mounted) return false;
 
-      await detect();
+      bool hasHighDanger = await detectWithYolo();
 
-      await Future.delayed(const Duration(seconds: 4));
+      int waitSeconds = hasHighDanger
+          ? _dangerIntervalSeconds
+          : _normalIntervalSeconds;
 
-      return true; // keep loop running
+      await Future.delayed(Duration(seconds: waitSeconds));
+
+      return true;
     });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!controller.value.isInitialized) return;
-
-    if (state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.paused) {
+ if (state == AppLifecycleState.inactive ||
+      state == AppLifecycleState.paused) {
+      controller.stopImageStream();
       controller.dispose();
+      flutterTts.stop();
     } else if (state == AppLifecycleState.resumed) {
       initCamera();
     }
   }
 
-  Future<void> detect() async {
-    if (isProcessing) return;
-    if (!controller.value.isInitialized ||
-        controller.value.isTakingPicture) return;
+  Future<void> _vibrateHighDanger() async {
+    bool? hasVibrator = await Vibration.hasVibrator();
+    if (hasVibrator != true) return;
+    Vibration.vibrate(pattern: [0, 500, 100, 500, 100, 500]);
+  }
+
+  Future<void> _vibrate(String type) async {
+    bool? hasVibrator = await Vibration.hasVibrator();
+    if (hasVibrator != true) return;
+
+    switch (type) {
+      case "high_danger":
+        Vibration.vibrate(pattern: [0, 500, 100, 500, 100, 500]);
+        break;
+      case "medium_danger":
+        Vibration.vibrate(pattern: [0, 300, 200, 300]);
+        break;
+      case "low_danger":
+        Vibration.vibrate(duration: 200);
+        break;
+    }
+  }
+
+  Future<void> _speakImmediate(String text, String type) async {
+    await flutterTts.stop();
+
+    switch (type) {
+      case "high_danger":
+        await flutterTts.setPitch(1.6);
+        await flutterTts.setSpeechRate(0.7);
+        break;
+      case "medium_danger":
+        await flutterTts.setPitch(1.3);
+        await flutterTts.setSpeechRate(0.6);
+        break;
+      case "low_danger":
+        await flutterTts.setPitch(1.1);
+        await flutterTts.setSpeechRate(0.55);
+        break;
+      default:
+        await flutterTts.setPitch(1.0);
+        await flutterTts.setSpeechRate(0.5);
+    }
+
+    isSpeaking = true;
+    await flutterTts.speak(text);
+  }
+
+  bool _shouldSpeak(String newDescription, String newResponseType) {
+    if (newDescription.isEmpty) return false;
+
+    if (isSpeaking && newResponseType != "high_danger") return false;
+
+    if (newResponseType == "high_danger") {
+      if (_lastHighDangerSpoken == null ||
+          DateTime.now().difference(_lastHighDangerSpoken!).inSeconds >= 5) {
+        _lastHighDangerSpoken = DateTime.now();
+        return true;
+      }
+      return false;
+    }
+
+    return newDescription != description;
+  }
+
+  Future<bool> detectWithYolo() async {
+    if (isProcessing) return false;
+    if (!controller.value.isInitialized) return false;
 
     try {
       isProcessing = true;
 
+      await controller.stopImageStream();
+
       final file = await controller.takePicture();
       final bytes = await file.readAsBytes();
 
+      controller.startImageStream((CameraImage image) {
+        _processFrameLocally(image);
+      });
+
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('http://192.168.1.11:8000/detect'),
+        Uri.parse('http://192.168.1.8:8000/detect'),
       );
 
       request.files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          bytes,
-          filename: 'frame.jpg',
-        ),
+        http.MultipartFile.fromBytes('file', bytes, filename: 'frame.jpg'),
       );
 
       var response = await request.send();
       var resStr = await response.stream.bytesToString();
-
       var jsonRes = jsonDecode(resStr);
 
       String newDescription =
           jsonRes['description'] ?? "No description available";
+      String newResponseType = jsonRes['response_type'] ?? "clear";
+      bool hasHighDanger = jsonRes['has_high_danger'] ?? false;
 
-      if (!mounted) return;
+      if (!mounted) return false;
+
+      if (newResponseType == "high_danger") {
+        SemanticsService.announce(newDescription, TextDirection.ltr);
+
+        if (responseType != "high_danger") {
+          await flutterTts.stop();
+          isSpeaking = false;
+        }
+      }
+
+      if (_shouldSpeak(newDescription, newResponseType)) {
+        if (newResponseType != "clear" && newResponseType != "error") {
+          await _vibrate(newResponseType);
+        }
+        await _speakImmediate(newDescription, newResponseType);
+      }
 
       setState(() {
         description = newDescription;
+        responseType = newResponseType;
       });
 
-      print("DESCRIPTION: $newDescription");
-
-      if (newDescription.isNotEmpty &&
-          newDescription != lastSpoken &&
-          !isSpeaking) {
-
-        lastSpoken = newDescription;
-        isSpeaking = true;
-
-        await flutterTts.stop(); 
-        await flutterTts.speak(newDescription);
-      }
-
+      return hasHighDanger;
     } catch (e) {
       print("ERROR: $e");
+      if (controller.value.isInitialized &&
+          !controller.value.isStreamingImages) {
+        controller.startImageStream((CameraImage image) {
+          _processFrameLocally(image);
+        });
+      }
+
+      return false;
     } finally {
       isProcessing = false;
     }
@@ -156,7 +298,9 @@ class _CameraScreenState extends State<CameraScreen>
 
   @override
   void dispose() {
-    timer?.cancel();
+    if (controller.value.isStreamingImages) {
+      controller.stopImageStream();
+    }
     controller.dispose();
     flutterTts.stop();
     WidgetsBinding.instance.removeObserver(this);
@@ -166,30 +310,42 @@ class _CameraScreenState extends State<CameraScreen>
   @override
   Widget build(BuildContext context) {
     if (!controller.value.isInitialized) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        body: Semantics(
+          label: "Loading camera, please wait",
+          child: const Center(child: CircularProgressIndicator()),
+        ),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Blind Assist")),
-
       body: Stack(
         children: [
-          CameraPreview(controller),
+          ExcludeSemantics(
+            child: SizedBox.expand(child: CameraPreview(controller)),
+          ),
 
           Positioned(
             bottom: 20,
-            left: 20,
-            right: 20,
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              color: Colors.black54,
-              child: Text(
-                description.isEmpty
-                    ? "No scene detected"
-                    : description,
-                style: const TextStyle(color: Colors.white),
+            left: 16,
+            right: 16,
+            child: Semantics(
+              label: description.isEmpty ? "Scanning" : description,
+              liveRegion: true,
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.75),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  description.isEmpty ? "Scanning..." : description,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    height: 1.5,
+                  ),
+                ),
               ),
             ),
           ),
