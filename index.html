@@ -9,7 +9,7 @@
 
 <button onclick="startCamera()">Open Camera</button>
 <button onclick="stopCamera()">Close Camera</button>
-
+<input type="checkbox" id="translateCheck"> Translate to Arabic
 <br><br>
 
 <video id="video" width="400" autoplay style="display:none;"></video>
@@ -22,6 +22,10 @@
 <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data">
     <input type="file" name="file" id="fileInput" required>
     <button type="submit">Upload</button>
+    <label>
+    <input type="checkbox" name="translate" value="true">
+    Translate to Arabic
+</label>
 </form>
 
 <hr>
@@ -71,7 +75,8 @@ function capture() {
     canvas.toBlob(blob => {
         const formData = new FormData();
         formData.append("file", blob, "capture.jpg");
-
+       const translate = document.getElementById("translateCheck").checked;
+      formData.append("translate", translate);
     fetch("/ocr", {
     method: "POST",
     body: formData
