@@ -5,7 +5,7 @@ import cv2
 
 app = FastAPI()
 
-model = YOLO("yolov8m.pt")
+model = YOLO("models/yolov8m.pt")
 
 DANGEROUS_OBJECTS = {
     "high": [
@@ -45,11 +45,12 @@ def get_distance(x1, y1, x2, y2, frame_area):
 
 
 def get_danger_level(name, distance):
+
     if distance == "very close":
         for level, objects in DANGEROUS_OBJECTS.items():
             if name in objects:
                 return level
-    return None  
+    return None
 
 
 def generate_warning_message(name, direction, danger_level):
@@ -131,7 +132,7 @@ async def detect(file: UploadFile = File(...)):
         if all_warnings:
             warnings_text = " Also, ".join(all_warnings)
             description = warnings_text + ". " + description
-            response_type = "clear"
+        response_type = "clear"
         if high_priority_warnings:
             response_type = "high_danger"
         elif medium_priority_warnings:

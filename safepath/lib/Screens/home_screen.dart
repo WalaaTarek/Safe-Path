@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
+import 'package:safepath/Screens/money_page.dart';
 import 'camera_screen.dart';
 import 'history_screen.dart';
 import 'settings_screen.dart';
-import 'camera_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final List<CameraDescription> cameras;
@@ -15,7 +15,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-
   int currentIndex = 0;
 
   late List<Widget> screens;
@@ -26,6 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     screens = [
       CameraScreen(cameras: widget.cameras),
+      const MoneyPage(),
       const HistoryScreen(),
       const SettingsScreen(),
     ];
@@ -38,6 +38,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentIndex,
+        selectedItemColor: Colors.deepPurple,
+        unselectedItemColor: const Color.fromARGB(224, 126, 126, 126),
+        showSelectedLabels: true,
+        showUnselectedLabels: true,
         onTap: (index) {
           setState(() {
             currentIndex = index;
@@ -50,9 +54,10 @@ class _HomeScreenState extends State<HomeScreen> {
             label: "Camera",
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.history),
-            label: "History",
+            icon: Icon(Icons.monetization_on),
+            label: "Money",
           ),
+          BottomNavigationBarItem(icon: Icon(Icons.history), label: "History"),
           BottomNavigationBarItem(
             icon: Icon(Icons.settings),
             label: "Settings",
