@@ -8,6 +8,7 @@ from pdf2image import convert_from_path
 import easyocr
 import re
 from flask import render_template
+from translator import translate_text
 # 🔗 Tesseract path
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 # 🔥 EasyOCR (MAIN)
@@ -41,6 +42,7 @@ def read_image_tesseract(path):
     )
 
 def clean_text(text):
+    # حذف الرموز الغريبة
     text = re.sub(r'[^\u0600-\u06FFa-zA-Z0-9\s\n.,!?]', '', text)
 
     lines = text.split("\n")
@@ -133,11 +135,14 @@ def home():
 @app.route("/upload", methods=["POST"])
 def upload():
     file = request.files["file"]
+    translate_flag = request.form.get("translate")
     file_path = os.path.join(UPLOAD_FOLDER, file.filename)
     file.save(file_path)
-
+    translate_flag = request.form.get("translate")
     try:
         result = read_file(file_path)
+        if translate_flag == "true":
+         result = translate_text(result)
         return render_template("index.html", text=result)
 
     finally:
@@ -149,11 +154,14 @@ def ocr():
         return jsonify({"error": "No file uploaded"}), 400
 
     file = request.files["file"]
+    translate_flag = request.form.get("translate")
     file_path = os.path.join(UPLOAD_FOLDER, file.filename)
     file.save(file_path)
-
+    translate_flag = request.form.get("translate")
     try:
         result = read_file(file_path)
+        if translate_flag == "true":
+         result = translate_text(result)
         return jsonify({"text": result})
 
     except Exception as e:
