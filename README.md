@@ -54,6 +54,10 @@ pytesseract.pytesseract.tesseract_cmd = "YOUR_PATH"
 Download Poppler and update:
 poppler_path="YOUR_PATH"
 
+### Install sumy (for summerize)
+
+pip install sumy
+
 ## Run project
 
 python -m venv venv
