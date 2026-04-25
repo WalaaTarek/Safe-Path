@@ -39,7 +39,6 @@
 let video = document.getElementById('video');
 let stream = null;
 
-// تشغيل الكاميرا
 function startCamera() {
     navigator.mediaDevices.getUserMedia({ video: true })
     .then(s => {
@@ -53,7 +52,6 @@ function startCamera() {
     });
 }
 
-// إيقاف الكاميرا
 function stopCamera() {
     if (stream) {
         stream.getTracks().forEach(track => track.stop());
@@ -62,7 +60,6 @@ function stopCamera() {
     }
 }
 
-// التقاط صورة
 function capture() {
     const canvas = document.getElementById('canvas');
     const context = canvas.getContext('2d');
