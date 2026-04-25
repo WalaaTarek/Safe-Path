@@ -74,6 +74,8 @@ static const String Url = "http://<YOUR_IP>:8000/analyze";
 
 Replace <YOUR_IP> with your IP address
 ## 3. Run the Server
+## Requirements for translation 
+pip install deep-translator
 
 Open the terminal, navigate to the server folder (backend) and run:
 
