@@ -3,3 +3,7 @@ __pycache__/
 *.pyc
 .env
 venv/
+
+
+# firebase related
+firebase.json
