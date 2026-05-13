@@ -4,6 +4,8 @@ import 'package:safepath/Screens/money_page.dart';
 import 'camera_screen.dart';
 import 'history_screen.dart';
 import 'settings_screen.dart';
+import 'upload_screen.dart';
+
 
 class HomeScreen extends StatefulWidget {
   final List<CameraDescription> cameras;
@@ -28,6 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
       const MoneyPage(),
       const HistoryScreen(),
       const SettingsScreen(),
+      const UploadScreen(),
     ];
   }
 
@@ -39,7 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentIndex,
         selectedItemColor: Colors.deepPurple,
-        unselectedItemColor: const Color.fromARGB(224, 126, 126, 126),
+        unselectedItemColor: const Color.fromARGB(224, 126, 126, 126, 126),
         showSelectedLabels: true,
         showUnselectedLabels: true,
         onTap: (index) {
@@ -61,6 +64,10 @@ class _HomeScreenState extends State<HomeScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.settings),
             label: "Settings",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.upload_file),
+            label: "Upload",
           ),
         ],
       ),
