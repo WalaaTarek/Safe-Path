@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:safepath/services/api_service_coins.dart';
+import 'package:Safepath/services/api_service_coins.dart';
 
 class MoneyPage extends StatefulWidget {
   const MoneyPage({super.key});

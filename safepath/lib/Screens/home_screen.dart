@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-import 'package:safepath/Screens/money_page.dart';
+import 'package:Safepath/Screens/money_page.dart';
 import 'camera_screen.dart';
 import 'history_screen.dart';
 import 'settings_screen.dart';
@@ -42,7 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentIndex,
         selectedItemColor: Colors.deepPurple,
-        unselectedItemColor: const Color.fromARGB(224, 126, 126, 126, 126),
+        unselectedItemColor: const Color.fromARGB(224, 126, 126, 126),
         showSelectedLabels: true,
         showUnselectedLabels: true,
         onTap: (index) {
