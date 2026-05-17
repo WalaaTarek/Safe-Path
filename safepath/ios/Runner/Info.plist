@@ -45,5 +45,17 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>
+	Need camera access for face recognition
+	</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>
+	Need microphone access for voice recognition
+	</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>
+	Need speech recognition access
+	</string>
 </dict>
 </plist>
