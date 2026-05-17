@@ -1,5 +1,5 @@
-name: safepath
-description: "A new Flutter project."
+name: Safepath
+description: "Safe Path is an intelligent mobile application designed to assist visually impaired people in their daily lives using artificial intelligence and computer vision technologies. The application helps users recognize surrounding objects, identify familiar people, and navigate more safely and independently through voice guidance and real-time camera analysis."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -32,6 +32,7 @@ dependencies:
     sdk: flutter
   vibration: ^2.0.0  
 
+  image_picker: ^1.1.2
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
@@ -43,7 +44,12 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: ^0.14.3
 
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icons/safepath_logo.png"
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your
