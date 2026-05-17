@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:Safepath/Screens/money_page.dart';
 import 'camera_screen.dart';
+import 'face_recognition_screen.dart';
 import 'history_screen.dart';
 import 'settings_screen.dart';
 import 'upload_screen.dart';
@@ -28,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
     screens = [
       CameraScreen(cameras: widget.cameras),
       const MoneyPage(),
+      FaceRecognitionScreen(cameras: widget.cameras),
       const HistoryScreen(),
       const SettingsScreen(),
       const UploadScreen(),
@@ -59,6 +61,10 @@ class _HomeScreenState extends State<HomeScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.monetization_on),
             label: "Money",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: "Person",
           ),
           BottomNavigationBarItem(icon: Icon(Icons.history), label: "History"),
           BottomNavigationBarItem(
