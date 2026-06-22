@@ -157,8 +157,8 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
     }
 
     await speak(
-      "Unknown person detected. "
-      "Do you want to save this person? "
+      "I don't recognize this person. "
+      "Would you like to save this face?"
       "Say yes or no.",
     );
 
@@ -167,7 +167,7 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
     debugPrint("User Answer: $answer");
 
     if (answer.contains("yes") || answer.contains("yeah")) {
-      await speak("Please say the person's name.");
+      await speak("Please tell me the person's name.");
 
       String personName = await listenOnce();
 
@@ -177,7 +177,7 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
       );
 
       if (personName.isEmpty) {
-        await speak("I could not hear the name.");
+        await speak("Sorry, I couldn't hear the name clearly. Please try again.");
 
         isVoiceInteracting = false;
 
@@ -187,7 +187,7 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
       }
 
       await speak(
-        "Please give a short description "
+        "Please provide a short description "
         "for this person.",
       );
 
@@ -252,7 +252,7 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
           });
         }
 
-        await speak("$name saved successfully.");
+        await speak("$name has been saved successfully.");
       } else {
         await speak(
           "Failed to save person "
@@ -323,7 +323,7 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
             detectedName = personName;
             status = "Verified: $personName";
           });
-          await speak("$personName detected");
+          await speak("$personName is recognized.");
         } else if (resStatus == "unknown") {
           await handleUnknownFace(bytes);
         }

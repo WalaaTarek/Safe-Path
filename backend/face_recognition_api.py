@@ -19,7 +19,7 @@ BASE_DIR = os.path.dirname(
 MODEL_PATH = os.path.join(
     BASE_DIR,
     "models",
-    "mobilefacenet.tflite",
+    "face_recognition_model.tflite",
 )
 
 FIREBASE_CREDENTIALS = "firebase.json"
@@ -42,8 +42,8 @@ output_details = (interpreter.get_output_details())
 
 model_lock = threading.Lock()
 
-INPUT_SIZE = 112
-SIMILARITY_THRESHOLD = 0.95
+INPUT_SIZE = 100
+SIMILARITY_THRESHOLD = 0.5
 
 mp_face_detection = (mp.solutions.face_detection)
 
@@ -61,7 +61,7 @@ def preprocess_image(image_bytes):
     if not results.detections:
 
         print(
-            "⚠️ [MediaPipe] "
+            "[MediaPipe] "
             "No face detected."
         )
 
@@ -81,14 +81,14 @@ def preprocess_image(image_bytes):
 
     if x2 <= x1 or y2 <= y1:
 
-        print("⚠️ [MediaPipe] "
+        print("[MediaPipe] "
             "Invalid face box."
         )
 
         return None
 
     print(
-        f"ℹ️ [MediaPipe] "
+        f"[MediaPipe] "
         f"Face Size: "
         f"{x2-x1}x{y2-y1}"
     )
@@ -99,7 +99,7 @@ def preprocess_image(image_bytes):
 
     face = face.astype(np.float32)
 
-    face = (face - 127.5) / 128.0
+    face = face / 255.0
 
     face = np.expand_dims(face,axis=0,)
 
@@ -158,7 +158,7 @@ def find_matching_person(new_embedding):
             best_description = data.get("description","No description", )
 
     print(
-        f"🔬 [Matching] "
+        f"[Matching] "
         f"Closest Name: "
         f"{best_name}, "
         f"Distance: "
@@ -228,7 +228,22 @@ def add_new_face(name: str,description: str,embedding: list,):
 @app.get("/face-recognition")
 def home():
 
-    return {"status": "online"}
+    try:
+
+        return {
+            "status": "online"
+        }
+
+    except Exception:
+
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "errorCode": "SERVICE_UNAVAILABLE",
+                "message": "Face Recognition Service is currently unavailable"
+            }
+        )
 
 @app.post(
     "/face-recognition/recognize-face"
@@ -295,15 +310,34 @@ async def recognize_face(
                 ],
         }
 
-    except Exception as e:
-
+    except FileNotFoundError:
         return JSONResponse(
-
-            status_code=500,
-
+            status_code=404,
             content={
-                "error": str(e)
-            },
+                "status": "error",
+                "errorCode": "FILE_NOT_FOUND",
+                "message": "Required file not found"
+            }
+        )
+
+    except ValueError:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "error",
+                "errorCode": "INVALID_IMAGE",
+                "message": "Invalid image format"
+            }
+        )
+
+    except Exception:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "errorCode": "INTERNAL_SERVER_ERROR",
+                "message": "Unexpected server error"
+            }
         )
 
 @app.post(
@@ -350,12 +384,12 @@ async def save_new_face(name: str = Form(...), description: str = Form(...), fil
         )
 
         print(
-            f"💾 [Database] "
+            f"[Database] "
             f"Saved: {name}"
         )
 
         print(
-            f"📝 Description: "
+            f"Description: "
             f"{description}"
         )
 
@@ -368,14 +402,33 @@ async def save_new_face(name: str = Form(...), description: str = Form(...), fil
                 f"{name} "
                 f"registered successfully",
         }
-
-    except Exception as e:
-
+    
+    except FileNotFoundError:
         return JSONResponse(
-
-            status_code=500,
-
+            status_code=404,
             content={
-                "error": str(e)
-            },
+                "status": "error",
+                "errorCode": "FILE_NOT_FOUND",
+                "message": "Required file not found"
+            }
+        )
+
+    except ValueError:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "error",
+                "errorCode": "INVALID_IMAGE",
+                "message": "Invalid image format"
+            }
+        )
+
+    except Exception:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "errorCode": "DATABASE_ERROR",
+                "message": "Unable to save face data"
+            }
         )
