@@ -1,0 +1,5 @@
+The face recognition model link
+https://drive.google.com/file/d/1vpKqJxEFG5mjJz-kyioldNj2AibQMM6P/view?usp=sharing
+
+The dataset link
+https://www.kaggle.com/datasets/hereisburak/pins-face-recognition
