@@ -1,13 +1,16 @@
+import 'package:Safepath/Screens/signup_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'Screens/home_screen.dart';
+import 'Screens/login_screen.dart';
+import 'Screens/signup_screen.dart';
 
 List<CameraDescription> cameras = [];
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   cameras = await availableCameras();
-  runApp(const MyApp());
+  runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -17,7 +20,14 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: HomeScreen(cameras: cameras),
+
+      initialRoute: '/login',
+
+      routes: {
+        '/login': (context) => const LoginScreen(),
+        '/signup': (context) => const SignupScreen(),
+        '/home': (context) => HomeScreen(cameras: cameras),
+      },
     );
   }
 }
