@@ -1,17 +1,24 @@
 import 'dart:convert';
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:camera/camera.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:vibration/vibration.dart';
+import 'package:record/record.dart';
 
 class CameraScreen extends StatefulWidget {
   final List<CameraDescription> cameras;
+  final Function(int) onNavigate;
 
-  const CameraScreen({super.key, required this.cameras});
+  const CameraScreen({
+    super.key,
+    required this.cameras,
+    required this.onNavigate,
+  });
 
   @override
   State<CameraScreen> createState() => _CameraScreenState();
@@ -22,6 +29,10 @@ class _CameraScreenState extends State<CameraScreen>
   late CameraController controller;
   final FlutterTts flutterTts = FlutterTts();
 
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  bool _isRecording = false;
+  String _audioPath = "";
+
   String description = "";
   String responseType = "clear";
 
@@ -30,11 +41,8 @@ class _CameraScreenState extends State<CameraScreen>
   bool isDetectLoopRunning = false;
 
   double? _lastBrightness;
-
   DateTime? _lastProximityAlert;
-
   static const double _brightnessThreshold = 30.0;
-
   static const int _proximityAlertCooldownSeconds = 1;
   DateTime? _lastHighDangerSpoken;
 
@@ -54,7 +62,6 @@ class _CameraScreenState extends State<CameraScreen>
     flutterTts.setSpeechRate(0.5);
     flutterTts.setVolume(1.0);
     flutterTts.setPitch(1.0);
-
     flutterTts.setCompletionHandler(() {
       isSpeaking = false;
     });
@@ -67,15 +74,10 @@ class _CameraScreenState extends State<CameraScreen>
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.yuv420,
     );
-
     await controller.initialize();
-
     if (!mounted) return;
-
     setState(() {});
-
     startProximityDetection();
-
     startYoloDetectionLoop();
   }
 
@@ -103,7 +105,6 @@ class _CameraScreenState extends State<CameraScreen>
           _triggerProximityAlert();
         }
       }
-
       _lastBrightness = currentBrightness;
     } catch (e) {
       print("Error processing frame for proximity: $e");
@@ -115,11 +116,8 @@ class _CameraScreenState extends State<CameraScreen>
       int diff = DateTime.now().difference(_lastProximityAlert!).inSeconds;
       if (diff < _proximityAlertCooldownSeconds) return;
     }
-
     _lastProximityAlert = DateTime.now();
-
     _vibrateHighDanger();
-
     if (!isSpeaking) {
       _speakImmediate("Watch out! Something is very close!", "high_danger");
     }
@@ -131,17 +129,133 @@ class _CameraScreenState extends State<CameraScreen>
 
     Future.doWhile(() async {
       if (!mounted) return false;
-
+      if (_isRecording) {
+        await Future.delayed(const Duration(seconds: 1));
+        return true;
+      }
       bool hasHighDanger = await detectWithYolo();
-
       int waitSeconds = hasHighDanger
           ? _dangerIntervalSeconds
           : _normalIntervalSeconds;
-
       await Future.delayed(Duration(seconds: waitSeconds));
-
       return true;
     });
+  }
+
+  Future<void> _startRecording() async {
+    try {
+      if (await _audioRecorder.hasPermission()) {
+        final directory = await Directory.systemTemp.createTemp();
+        _audioPath = '${directory.path}/my_command.wav';
+
+        await _audioRecorder.start(
+          const RecordConfig(
+            encoder: AudioEncoder.wav,
+            sampleRate: 16000,
+            numChannels: 1,
+          ),
+          path: _audioPath,
+        );
+
+        setState(() {
+          _isRecording = true;
+          description = "Listening... Speak now";
+        });
+      }
+    } catch (e) {
+      print("Start record error: $e");
+    }
+  }
+
+  Future<void> _stopAndSendRecording() async {
+    try {
+      final path = await _audioRecorder.stop();
+      setState(() {
+        _isRecording = false;
+      });
+
+      if (path != null && controller.value.isInitialized) {
+        setState(() {
+          description = "Processing voice command...";
+        });
+
+        final file = await controller.takePicture();
+        final imageBytes = await file.readAsBytes();
+        final audioFile = File(path);
+
+        var request = http.MultipartRequest(
+          'POST',
+          Uri.parse('http://192.168.1.2:3000/command'),
+        );
+
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'image',
+            imageBytes,
+            filename: 'frame.jpg',
+          ),
+        );
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            'audio',
+            audioFile.path,
+            filename: 'command.wav',
+          ),
+        );
+
+        var response = await request.send();
+        var resStr = await response.stream.bytesToString();
+        var jsonRes = jsonDecode(resStr);
+        if (jsonRes.containsKey('target_tab') && jsonRes['target_tab'] != "") {
+          String targetTab = jsonRes['target_tab'];
+          String message = jsonRes['message'] ?? "Navigating";
+
+          await _speakImmediate(message, "clear");
+
+          int newIndex = 0;
+          switch (targetTab) {
+            case "camera":
+              newIndex = 0;
+              break;
+            case "money":
+              newIndex = 1;
+              break;
+            case "person":
+              newIndex = 2;
+              break;
+            case "history":
+              newIndex = 3;
+              break;
+            case "settings":
+              newIndex = 4;
+              break;
+            case "upload":
+              newIndex = 5;
+              break;
+          }
+          widget.onNavigate(newIndex);
+          return;
+        }
+
+        String newDescription =
+            jsonRes['description'] ?? "No response available";
+        String newResponseType = jsonRes['response_type'] ?? "clear";
+
+        if (!mounted) return;
+
+        await _speakImmediate(newDescription, newResponseType);
+
+        setState(() {
+          description = newDescription;
+          responseType = newResponseType;
+        });
+      }
+    } catch (e) {
+      print("Stop and send record error: $e");
+      setState(() {
+        description = "Error executing voice command";
+      });
+    }
   }
 
   @override
@@ -166,7 +280,6 @@ class _CameraScreenState extends State<CameraScreen>
   Future<void> _vibrate(String type) async {
     bool? hasVibrator = await Vibration.hasVibrator();
     if (hasVibrator != true) return;
-
     switch (type) {
       case "high_danger":
         Vibration.vibrate(pattern: [0, 500, 100, 500, 100, 500]);
@@ -182,7 +295,6 @@ class _CameraScreenState extends State<CameraScreen>
 
   Future<void> _speakImmediate(String text, String type) async {
     await flutterTts.stop();
-
     switch (type) {
       case "high_danger":
         await flutterTts.setPitch(1.6);
@@ -200,16 +312,13 @@ class _CameraScreenState extends State<CameraScreen>
         await flutterTts.setPitch(1.0);
         await flutterTts.setSpeechRate(0.5);
     }
-
     isSpeaking = true;
     await flutterTts.speak(text);
   }
 
   bool _shouldSpeak(String newDescription, String newResponseType) {
     if (newDescription.isEmpty) return false;
-
     if (isSpeaking && newResponseType != "high_danger") return false;
-
     if (newResponseType == "high_danger") {
       if (_lastHighDangerSpoken == null ||
           DateTime.now().difference(_lastHighDangerSpoken!).inSeconds >= 4) {
@@ -218,31 +327,21 @@ class _CameraScreenState extends State<CameraScreen>
       }
       return false;
     }
-
     return newDescription != description;
   }
 
   Future<bool> detectWithYolo() async {
     if (isProcessing) return false;
     if (!controller.value.isInitialized) return false;
-
     try {
       isProcessing = true;
-
-      await controller.stopImageStream();
-
       final file = await controller.takePicture();
       final bytes = await file.readAsBytes();
 
-      controller.startImageStream((CameraImage image) {
-        _processFrameLocally(image);
-      });
-
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('http://192.168.1.8:8000/detect'),
+        Uri.parse('http://192.168.1.2:3000/detect'),
       );
-
       request.files.add(
         http.MultipartFile.fromBytes('file', bytes, filename: 'frame.jpg'),
       );
@@ -260,7 +359,6 @@ class _CameraScreenState extends State<CameraScreen>
 
       if (newResponseType == "high_danger") {
         SemanticsService.announce(newDescription, TextDirection.ltr);
-
         if (responseType != "high_danger") {
           await flutterTts.stop();
           isSpeaking = false;
@@ -278,17 +376,9 @@ class _CameraScreenState extends State<CameraScreen>
         description = newDescription;
         responseType = newResponseType;
       });
-
       return hasHighDanger;
     } catch (e) {
-      print("ERROR: $e");
-      if (controller.value.isInitialized &&
-          !controller.value.isStreamingImages) {
-        controller.startImageStream((CameraImage image) {
-          _processFrameLocally(image);
-        });
-      }
-
+      print("ERROR IN YOLO DETECT: $e");
       return false;
     } finally {
       isProcessing = false;
@@ -302,6 +392,7 @@ class _CameraScreenState extends State<CameraScreen>
     }
     controller.dispose();
     flutterTts.stop();
+    _audioRecorder.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -318,37 +409,47 @@ class _CameraScreenState extends State<CameraScreen>
     }
 
     return Scaffold(
-      body: Stack(
-        children: [
-          ExcludeSemantics(
-            child: SizedBox.expand(child: CameraPreview(controller)),
-          ),
-
-          Positioned(
-            bottom: 20,
-            left: 16,
-            right: 16,
-            child: Semantics(
-              label: description.isEmpty ? "Scanning" : description,
-              liveRegion: true,
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.75),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  description.isEmpty ? "Scanning..." : description,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    height: 1.5,
+      body: GestureDetector(
+        onLongPressStart: (_) async {
+          await _vibrate("low_danger");
+          _startRecording();
+        },
+        onLongPressEnd: (_) async {
+          _stopAndSendRecording();
+        },
+        child: Stack(
+          children: [
+            ExcludeSemantics(
+              child: SizedBox.expand(child: CameraPreview(controller)),
+            ),
+            Positioned(
+              bottom: 20,
+              left: 16,
+              right: 16,
+              child: Semantics(
+                label: description.isEmpty ? "Scanning" : description,
+                liveRegion: true,
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: _isRecording
+                        ? Colors.red.withValues(alpha: 0.85)
+                        : Colors.black.withValues(alpha: 0.75),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    description.isEmpty ? "Scanning..." : description,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      height: 1.5,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
