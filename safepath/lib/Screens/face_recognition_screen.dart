@@ -177,7 +177,9 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
       );
 
       if (personName.isEmpty) {
-        await speak("Sorry, I couldn't hear the name clearly. Please try again.");
+        await speak(
+          "Sorry, I couldn't hear the name clearly. Please try again.",
+        );
 
         isVoiceInteracting = false;
 
@@ -205,6 +207,93 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
       await savePerson(personName, description, imageBytes);
     } else {
       await speak("Person not saved.");
+    }
+
+    isVoiceInteracting = false;
+
+    startRecognitionLoop();
+  }
+
+  Future<void> handleKnownFace(
+    String documentId,
+    String personName,
+    String description,
+  ) async {
+    isVoiceInteracting = true;
+
+    recognitionTimer?.cancel();
+
+    await speak("$personName recognized.");
+
+    await speak(
+      "Would you like to edit or delete this person? "
+      "Say edit, delete, or no.",
+    );
+
+    String action = await listenOnce();
+
+    debugPrint("Action: $action");
+
+    if (action.contains("edit")) {
+      await speak("Would you like to edit name or description?");
+
+      String choice = await listenOnce();
+
+      if (choice.contains("name")) {
+        await speak("Please say the new name.");
+
+        String newName = await listenOnce();
+
+        if (newName.isNotEmpty) {
+          await updatePerson(documentId, newName, "");
+
+          if (mounted) {
+            setState(() {
+              detectedName = newName;
+              status = "Name Updated";
+            });
+          }
+        }
+      } else if (choice.contains("description")) {
+        await speak("Please say the new description.");
+
+        String newDescription = await listenOnce();
+
+        if (newDescription.isNotEmpty) {
+          await updatePerson(documentId, "", newDescription);
+
+          if (mounted) {
+            setState(() {
+              status = "Description Updated";
+            });
+          }
+        }
+      } else {
+        await speak("Invalid option.");
+      }
+    } else if (action.contains("delete")) {
+      await speak(
+        "Are you sure you want to delete "
+        "$personName ? "
+        "Say yes or no.",
+      );
+
+      String confirm = await listenOnce();
+
+      if (confirm.contains("yes")) {
+        await deletePerson(documentId);
+
+        if (mounted) {
+          setState(() {
+            detectedName = "Deleted";
+            status = "$personName removed";
+          });
+        }
+      } else {
+        await speak("Delete cancelled.");
+      }
+    } else {
+      await speak("Okay.");
     }
 
     isVoiceInteracting = false;
@@ -272,9 +361,13 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
   Future<void> recognizeFace() async {
     if (controller == null ||
         !controller!.value.isInitialized ||
-        _isControllerDisposed)
+        _isControllerDisposed) {
       return;
-    if (isProcessing || isVoiceInteracting) return;
+    }
+
+    if (isProcessing || isVoiceInteracting) {
+      return;
+    }
 
     try {
       isProcessing = true;
@@ -299,9 +392,11 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
       );
 
       var response = await request.send().timeout(const Duration(seconds: 7));
+
       var responseString = await response.stream.bytesToString();
 
       debugPrint("Server Raw Response: $responseString");
+
       var data = jsonDecode(responseString);
 
       if (!mounted || isVoiceInteracting) return;
@@ -314,16 +409,21 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
             detectedName = "Scanning...";
             status = "No face detected in frame";
           });
-          return;
-        }
 
-        if (resStatus == "known") {
+          return;
+        } else if (resStatus == "known") {
+          String documentId = data["document_id"];
+
           String personName = data["name"];
+
+          String description = data["description"] ?? "";
+
           setState(() {
             detectedName = personName;
             status = "Verified: $personName";
           });
-          await speak("$personName is recognized.");
+
+          await handleKnownFace(documentId, personName, description);
         } else if (resStatus == "unknown") {
           await handleUnknownFace(bytes);
         }
@@ -337,6 +437,61 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
       debugPrint("Error in recognizeFace: $e");
     } finally {
       isProcessing = false;
+    }
+  }
+
+  Future<void> updatePerson(
+    String documentId,
+    String newName,
+    String newDescription,
+  ) async {
+    try {
+      var request = http.MultipartRequest(
+        "PUT",
+        Uri.parse("$baseUrl/face-recognition/update-face"),
+      );
+
+      request.fields["document_id"] = documentId;
+
+      if (newName.isNotEmpty) {
+        request.fields["new_name"] = newName;
+      }
+
+      if (newDescription.isNotEmpty) {
+        request.fields["new_description"] = newDescription;
+      }
+
+      var response = await request.send();
+
+      if (response.statusCode == 200) {
+        await speak("Person updated successfully");
+      } else {
+        await speak("Failed to update person");
+      }
+    } catch (e) {
+      debugPrint("Update Error: $e");
+
+      await speak("Error updating person");
+    }
+  }
+
+  Future<void> deletePerson(String documentId) async {
+    try {
+      var response = await http.delete(
+        Uri.parse(
+          "$baseUrl/face-recognition/delete-face?document_id=$documentId",
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        await speak("Person deleted successfully");
+      } else {
+        await speak("Failed to delete person");
+      }
+    } catch (e) {
+      debugPrint("Delete Error: $e");
+
+      await speak("Error deleting person");
     }
   }
 
