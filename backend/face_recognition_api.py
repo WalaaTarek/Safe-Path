@@ -49,6 +49,69 @@ mp_face_detection = (mp.solutions.face_detection)
 
 face_detector = (mp_face_detection.FaceDetection(model_selection=0,min_detection_confidence=0.6,))
 
+def get_face_document(
+    document_id: str
+):
+
+    doc = (
+        db.collection("known_faces")
+        .document(document_id)
+        .get()
+    )
+
+    if not doc.exists:
+        return None
+
+    return doc
+
+def update_face(
+    document_id: str,
+    new_name: str = None,
+    new_description: str = None,
+    new_embedding: list = None
+):
+
+    doc = get_face_document(
+        document_id
+    )
+
+    if doc is None:
+        return False
+
+    update_data = {}
+
+    if new_name:
+        update_data["name"] = new_name
+
+    if new_description:
+        update_data["description"] = new_description
+
+    if new_embedding:
+        update_data["embedding"] = new_embedding
+
+    doc.reference.update(
+        update_data
+    )
+
+    return True
+
+def delete_face(
+    document_id: str
+):
+
+    doc = (
+        db.collection("known_faces")
+        .document(document_id)
+        .get()
+    )
+
+    if not doc.exists:
+        return False
+
+    doc.reference.delete()
+
+    return True
+
 def preprocess_image(image_bytes):
 
     image = Image.open(io.BytesIO(image_bytes))
@@ -139,6 +202,8 @@ def find_matching_person(new_embedding):
 
     best_description = None
 
+    best_doc_id = None
+
     new_emb_np = np.array(new_embedding)
 
     for doc in users:
@@ -155,7 +220,12 @@ def find_matching_person(new_embedding):
 
             best_name = data.get("name")
 
-            best_description = data.get("description","No description", )
+            best_description = data.get(
+                "description",
+                "No description",
+            )
+
+            best_doc_id = doc.id
 
     print(
         f"[Matching] "
@@ -169,14 +239,10 @@ def find_matching_person(new_embedding):
 
         return {
             "matched": True,
-            "name":
-                best_name,
-
-            "description":
-                best_description,
-
-            "distance":
-                float(best_dist),
+            "document_id": best_doc_id,
+            "name": best_name,
+            "description": best_description,
+            "distance": float(best_dist),
         }
 
     return {
@@ -194,36 +260,42 @@ def find_matching_person(new_embedding):
             else None,
     }
 
+def face_exists(new_embedding):
 
-def check_name_exists(
-    name: str
-) -> bool:
+    users = db.collection("known_faces").stream()
 
-    docs = (
-        db.collection("known_faces")
-        .where(
-            "name",
-            "==",
-            name,
-        )
-        .limit(1)
-        .get()
-    )
+    new_emb_np = np.array(new_embedding)
 
-    return len(docs) > 0
+    for doc in users:
 
+        data = doc.to_dict()
 
-def add_new_face(name: str,description: str,embedding: list,):
+        known_emb = np.array(data.get("embedding"))
 
-    db.collection("known_faces").add({
+        dist = np.linalg.norm(new_emb_np - known_emb)
+
+        if dist < SIMILARITY_THRESHOLD:
+
+            return {
+                "exists": True,
+                "document_id": doc.id,
+                "name": data.get("name"),
+                "distance": float(dist)
+            }
+
+    return {
+        "exists": False
+    }
+
+def add_new_face(name, description, embedding):
+
+    doc_ref = db.collection("known_faces").add({
         "name": name,
-
-        "description":
-            description,
-
-        "embedding":
-            embedding,
+        "description": description,
+        "embedding": embedding,
     })
+
+    return doc_ref[1].id
 
 @app.get("/face-recognition")
 def home():
@@ -279,18 +351,17 @@ async def recognize_face(
                 "status":
                     "known",
 
+                "document_id":
+                    result["document_id"],
+
                 "name":
                     result["name"],
 
                 "description":
-                    result[
-                        "description"
-                    ],
+                    result["description"],
 
                 "distance":
-                    result[
-                        "distance"
-                    ],
+                    result["distance"],
             }
 
         return {
@@ -362,21 +433,22 @@ async def save_new_face(name: str = Form(...), description: str = Form(...), fil
                 "message":
                     "No face detected",
             }
+        
+        existing_face = await run_in_threadpool(face_exists,embedding)
 
-        name_exists = (await run_in_threadpool(check_name_exists,name,))
+        if existing_face["exists"]:
 
-        if name_exists:
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "status": "already_exists",
+                    "document_id": existing_face["document_id"],
+                    "name": existing_face["name"],
+                    "message": "Face already exists in database"
+                }
+            )
 
-            return {
-
-                "status":
-                    "exists",
-
-                "message":
-                    f"{name} already exists",
-            }
-
-        await run_in_threadpool(
+        doc_id = await run_in_threadpool(
             add_new_face,
             name,
             description,
@@ -397,6 +469,8 @@ async def save_new_face(name: str = Form(...), description: str = Form(...), fil
 
             "status":
                 "saved",
+            
+            "document_id": doc_id,
 
             "message":
                 f"{name} "
@@ -430,5 +504,98 @@ async def save_new_face(name: str = Form(...), description: str = Form(...), fil
                 "status": "error",
                 "errorCode": "DATABASE_ERROR",
                 "message": "Unable to save face data"
+            }
+        )
+@app.put("/face-recognition/update-face")
+
+async def update_known_face(
+    document_id: str = Form(...),
+    new_name: str = Form(None),
+    new_description: str = Form(None),
+    file: UploadFile = File(None)
+):
+
+    try:
+
+        new_embedding = None
+
+        if file:
+
+            image_bytes = await file.read()
+
+            new_embedding = await run_in_threadpool(
+                get_embedding,
+                image_bytes
+            )
+
+            if new_embedding is None:
+
+                return {
+                    "status": "no_face",
+                    "message": "No face detected"
+                }
+
+        updated = await run_in_threadpool(
+            update_face,
+            document_id,
+            new_name,
+            new_description,
+            new_embedding
+        )
+
+        if not updated:
+
+            return {
+                "status": "not_found",
+                "message": "Person not found"
+            }
+
+        return {
+            "status": "updated",
+            "message": "Face updated successfully"
+        }
+
+    except Exception:
+
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": "Failed to update face"
+            }
+        )
+    
+@app.delete("/face-recognition/delete-face")
+
+async def remove_face(
+    document_id: str
+):
+
+    try:
+
+        deleted = await run_in_threadpool(
+            delete_face,
+            document_id
+        )
+
+        if not deleted:
+
+            return {
+                "status": "not_found",
+                "message": "Person not found"
+            }
+
+        return {
+            "status": "deleted",
+            "message": "Person deleted successfully"
+        }
+
+    except Exception:
+
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": "Failed to delete face"
             }
         )
