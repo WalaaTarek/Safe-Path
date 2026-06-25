@@ -51,7 +51,7 @@ class _UploadScreenState extends State<UploadScreen> {
     setState(() => isLoading = true);
 
     try {
-      var uri = Uri.parse("http://192.168.1.6:5000/ocr");
+      var uri = Uri.parse("http://192.168.1.10:8000/ocr");
 
       var request = http.MultipartRequest("POST", uri);
 

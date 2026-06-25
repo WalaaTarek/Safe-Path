@@ -2,13 +2,15 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
 import 'package:camera/camera.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:vibration/vibration.dart';
 import 'package:record/record.dart';
+
+import 'package:Safepath/services/language_manager.dart';
 
 class CameraScreen extends StatefulWidget {
   final List<CameraDescription> cameras;
@@ -24,12 +26,12 @@ class CameraScreen extends StatefulWidget {
   State<CameraScreen> createState() => _CameraScreenState();
 }
 
-class _CameraScreenState extends State<CameraScreen>
-    with WidgetsBindingObserver {
-  late CameraController controller;
+class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver {
+  CameraController? controller; 
   final FlutterTts flutterTts = FlutterTts();
-
   final AudioRecorder _audioRecorder = AudioRecorder();
+
+  bool _isCameraInitialized = false;
   bool _isRecording = false;
   String _audioPath = "";
 
@@ -57,46 +59,88 @@ class _CameraScreenState extends State<CameraScreen>
     initTts();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final CameraController? cameraController = controller;
+
+    if (cameraController == null || !cameraController.value.isInitialized) {
+      return;
+    }
+
+    if (state == AppLifecycleState.inactive) {
+      // إيقاف الـ UI أولاً لتجنب رسم فريمات ميتة، ثم عمل dispose بأمان
+      setState(() {
+        _isCameraInitialized = false;
+      });
+      cameraController.dispose();
+      controller = null;
+    } else if (state == AppLifecycleState.resumed) {
+      initCamera();
+    }
+  }
+
   void initTts() {
-    flutterTts.setLanguage('en-US');
+    flutterTts.setLanguage(LanguageManager.isArabic ? "ar-SA" : "en-US");
     flutterTts.setSpeechRate(0.5);
     flutterTts.setVolume(1.0);
     flutterTts.setPitch(1.0);
     flutterTts.setCompletionHandler(() {
-      isSpeaking = false;
+      setState(() {
+        isSpeaking = false;
+      });
     });
   }
 
+  Future<void> updateTtsLanguage() async {
+    await flutterTts.setLanguage(LanguageManager.isArabic ? "ar-SA" : "en-US");
+  }
+
   Future<void> initCamera() async {
+    if (widget.cameras.isEmpty) return;
+
     controller = CameraController(
       widget.cameras.first,
       ResolutionPreset.medium,
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.yuv420,
     );
-    await controller.initialize();
-    if (!mounted) return;
-    setState(() {});
-    startProximityDetection();
-    startYoloDetectionLoop();
+
+    try {
+      await controller!.initialize();
+      if (!mounted) return;
+
+      setState(() {
+        _isCameraInitialized = true;
+      });
+
+      startProximityDetection();
+      startYoloDetectionLoop();
+    } catch (e) {
+      print("Camera init error: $e");
+    }
   }
 
   void startProximityDetection() {
-    controller.startImageStream((CameraImage image) {
+    if (controller == null || !controller!.value.isInitialized) return;
+    
+    controller!.startImageStream((CameraImage image) {
       _processFrameLocally(image);
     });
   }
 
   void _processFrameLocally(CameraImage image) {
+    if (!_isCameraInitialized || controller == null) return;
     try {
       final Uint8List yPlane = image.planes[0].bytes;
       int total = 0;
       const int step = 10;
       int count = 0;
+
       for (int i = 0; i < yPlane.length; i += step) {
         total += yPlane[i];
         count++;
       }
+
       double currentBrightness = total / count;
 
       if (_lastBrightness != null) {
@@ -107,19 +151,26 @@ class _CameraScreenState extends State<CameraScreen>
       }
       _lastBrightness = currentBrightness;
     } catch (e) {
-      print("Error processing frame for proximity: $e");
+      print("Brightness error: $e");
     }
   }
 
   void _triggerProximityAlert() {
     if (_lastProximityAlert != null) {
       int diff = DateTime.now().difference(_lastProximityAlert!).inSeconds;
-      if (diff < _proximityAlertCooldownSeconds) return;
+      if (diff < _proximityAlertCooldownSeconds) {
+        return;
+      }
     }
+
     _lastProximityAlert = DateTime.now();
     _vibrateHighDanger();
+
     if (!isSpeaking) {
-      _speakImmediate("Watch out! Something is very close!", "high_danger");
+      _speakImmediate(
+        LanguageManager.isArabic ? "انتبه، يوجد شيء قريب جداً" : "Watch out! Something is very close!",
+        "high_danger",
+      );
     }
   }
 
@@ -129,15 +180,16 @@ class _CameraScreenState extends State<CameraScreen>
 
     Future.doWhile(() async {
       if (!mounted) return false;
-      if (_isRecording) {
+
+      if (_isRecording || !_isCameraInitialized || controller == null) {
         await Future.delayed(const Duration(seconds: 1));
         return true;
       }
-      bool hasHighDanger = await detectWithYolo();
-      int waitSeconds = hasHighDanger
-          ? _dangerIntervalSeconds
-          : _normalIntervalSeconds;
-      await Future.delayed(Duration(seconds: waitSeconds));
+
+      bool danger = await detectWithYolo();
+      await Future.delayed(
+        Duration(seconds: danger ? _dangerIntervalSeconds : _normalIntervalSeconds),
+      );
       return true;
     });
   }
@@ -146,7 +198,7 @@ class _CameraScreenState extends State<CameraScreen>
     try {
       if (await _audioRecorder.hasPermission()) {
         final directory = await Directory.systemTemp.createTemp();
-        _audioPath = '${directory.path}/my_command.wav';
+        _audioPath = '${directory.path}/command.wav';
 
         await _audioRecorder.start(
           const RecordConfig(
@@ -159,142 +211,18 @@ class _CameraScreenState extends State<CameraScreen>
 
         setState(() {
           _isRecording = true;
-          description = "Listening... Speak now";
+          description = LanguageManager.isArabic ? "استمع الآن" : "Listening...";
         });
       }
     } catch (e) {
-      print("Start record error: $e");
-    }
-  }
-
-  Future<void> _stopAndSendRecording() async {
-    try {
-      final path = await _audioRecorder.stop();
-      setState(() {
-        _isRecording = false;
-      });
-
-      if (path != null && controller.value.isInitialized) {
-        setState(() {
-          description = "Processing voice command...";
-        });
-
-        final file = await controller.takePicture();
-        final imageBytes = await file.readAsBytes();
-        final audioFile = File(path);
-
-        var request = http.MultipartRequest(
-          'POST',
-          Uri.parse('http://192.168.1.2:3000/command'),
-        );
-
-        request.files.add(
-          http.MultipartFile.fromBytes(
-            'image',
-            imageBytes,
-            filename: 'frame.jpg',
-          ),
-        );
-        request.files.add(
-          await http.MultipartFile.fromPath(
-            'audio',
-            audioFile.path,
-            filename: 'command.wav',
-          ),
-        );
-
-        var response = await request.send();
-        var resStr = await response.stream.bytesToString();
-        var jsonRes = jsonDecode(resStr);
-        if (jsonRes.containsKey('target_tab') && jsonRes['target_tab'] != "") {
-          String targetTab = jsonRes['target_tab'];
-          String message = jsonRes['message'] ?? "Navigating";
-
-          await _speakImmediate(message, "clear");
-
-          int newIndex = 0;
-          switch (targetTab) {
-            case "camera":
-              newIndex = 0;
-              break;
-            case "money":
-              newIndex = 1;
-              break;
-            case "person":
-              newIndex = 2;
-              break;
-            case "history":
-              newIndex = 3;
-              break;
-            case "settings":
-              newIndex = 4;
-              break;
-            case "upload":
-              newIndex = 5;
-              break;
-          }
-          widget.onNavigate(newIndex);
-          return;
-        }
-
-        String newDescription =
-            jsonRes['description'] ?? "No response available";
-        String newResponseType = jsonRes['response_type'] ?? "clear";
-
-        if (!mounted) return;
-
-        await _speakImmediate(newDescription, newResponseType);
-
-        setState(() {
-          description = newDescription;
-          responseType = newResponseType;
-        });
-      }
-    } catch (e) {
-      print("Stop and send record error: $e");
-      setState(() {
-        description = "Error executing voice command";
-      });
-    }
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (!controller.value.isInitialized) return;
-    if (state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.paused) {
-      controller.stopImageStream();
-      controller.dispose();
-      flutterTts.stop();
-    } else if (state == AppLifecycleState.resumed) {
-      initCamera();
-    }
-  }
-
-  Future<void> _vibrateHighDanger() async {
-    bool? hasVibrator = await Vibration.hasVibrator();
-    if (hasVibrator != true) return;
-    Vibration.vibrate(pattern: [0, 500, 100, 500, 100, 500]);
-  }
-
-  Future<void> _vibrate(String type) async {
-    bool? hasVibrator = await Vibration.hasVibrator();
-    if (hasVibrator != true) return;
-    switch (type) {
-      case "high_danger":
-        Vibration.vibrate(pattern: [0, 500, 100, 500, 100, 500]);
-        break;
-      case "medium_danger":
-        Vibration.vibrate(pattern: [0, 300, 200, 300]);
-        break;
-      case "low_danger":
-        Vibration.vibrate(duration: 200);
-        break;
+      print("Recording start error: $e");
     }
   }
 
   Future<void> _speakImmediate(String text, String type) async {
     await flutterTts.stop();
+    await updateTtsLanguage();
+
     switch (type) {
       case "high_danger":
         await flutterTts.setPitch(1.6);
@@ -312,14 +240,22 @@ class _CameraScreenState extends State<CameraScreen>
         await flutterTts.setPitch(1.0);
         await flutterTts.setSpeechRate(0.5);
     }
-    isSpeaking = true;
+
+    setState(() {
+      isSpeaking = true;
+    });
     await flutterTts.speak(text);
   }
 
   bool _shouldSpeak(String newDescription, String newResponseType) {
     if (newDescription.isEmpty) return false;
-    if (isSpeaking && newResponseType != "high_danger") return false;
+
+    if (isSpeaking && newResponseType != "high_danger") {
+      return false;
+    }
+
     if (newResponseType == "high_danger") {
+      // تم تصحيح اسم المتغير هنا وحذف الحرف الزائد بالكامل
       if (_lastHighDangerSpoken == null ||
           DateTime.now().difference(_lastHighDangerSpoken!).inSeconds >= 4) {
         _lastHighDangerSpoken = DateTime.now();
@@ -330,55 +266,140 @@ class _CameraScreenState extends State<CameraScreen>
     return newDescription != description;
   }
 
+  Future<void> _stopAndSendRecording() async {
+    try {
+      final path = await _audioRecorder.stop();
+      setState(() {
+        _isRecording = false;
+      });
+
+      if (path != null && _isCameraInitialized && controller != null && controller!.value.isInitialized) {
+        final image = await controller!.takePicture();
+        final imageBytes = await image.readAsBytes();
+        
+        var request = http.MultipartRequest(
+          'POST',
+          Uri.parse('http://192.168.1.10:8000/command'),
+        );
+
+        request.fields['language'] = LanguageManager.isArabic ? "ar" : "en";
+
+        request.files.add(
+          http.MultipartFile.fromBytes('image', imageBytes, filename: 'frame.jpg'),
+        );
+        request.files.add(
+          await http.MultipartFile.fromPath('audio', path, filename: 'command.wav'),
+        );
+
+        var response = await request.send();
+        var responseText = await response.stream.bytesToString();
+        var jsonResponse = jsonDecode(responseText);
+
+        if (jsonResponse.containsKey("target_tab")) {
+          String targetTab = jsonResponse["target_tab"];
+          String message = jsonResponse["message"] ?? (LanguageManager.isArabic ? "جاري الفتح" : "Opening");
+
+          await _speakImmediate(message, "clear");
+
+          int index = 0;
+          switch (targetTab) {
+            case "camera": index = 0; break;
+            case "money": index = 1; break;
+            case "person": index = 2; break;
+            case "history": index = 3; break;
+            case "settings": index = 4; break;
+            case "upload": index = 5; break;
+          }
+          widget.onNavigate(index);
+          return;
+        }
+
+        String newDescription = jsonResponse["description"] ?? "";
+        String newType = jsonResponse["response_type"] ?? "clear";
+
+        await _speakImmediate(newDescription, newType);
+
+        if (mounted) {
+          setState(() {
+            description = newDescription;
+            responseType = newType;
+          });
+        }
+      }
+    } catch (e) {
+      print("Voice command error: $e");
+    }
+  }
+
+  Future<void> _vibrateHighDanger() async {
+    bool? has = await Vibration.hasVibrator();
+    if (has == true) {
+      Vibration.vibrate(pattern: [0, 500, 100, 500]);
+    }
+  }
+
+  Future<void> _vibrate(String type) async {
+    bool? has = await Vibration.hasVibrator();
+    if (has != true) return;
+
+    switch (type) {
+      case "high_danger":
+        Vibration.vibrate(pattern: [0, 500, 100, 500]);
+        break;
+      case "medium_danger":
+        Vibration.vibrate(pattern: [0, 300, 200, 300]);
+        break;
+      case "low_danger":
+        Vibration.vibrate(duration: 200);
+        break;
+    }
+  }
+
   Future<bool> detectWithYolo() async {
     if (isProcessing) return false;
-    if (!controller.value.isInitialized) return false;
+    if (!_isCameraInitialized || controller == null || !controller!.value.isInitialized) return false;
+
     try {
       isProcessing = true;
-      final file = await controller.takePicture();
-      final bytes = await file.readAsBytes();
+      
+      final picture = await controller!.takePicture();
+      final bytes = await picture.readAsBytes();
 
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('http://192.168.1.2:3000/detect'),
+        Uri.parse('http://192.168.1.10:8000/detect'),
       );
+
+      request.fields['language'] = LanguageManager.isArabic ? "ar" : "en";
+
       request.files.add(
-        http.MultipartFile.fromBytes('file', bytes, filename: 'frame.jpg'),
+        http.MultipartFile.fromBytes('file', bytes, filename: "frame.jpg"),
       );
 
       var response = await request.send();
-      var resStr = await response.stream.bytesToString();
-      var jsonRes = jsonDecode(resStr);
+      var responseText = await response.stream.bytesToString();
+      var jsonResponse = jsonDecode(responseText);
 
-      String newDescription =
-          jsonRes['description'] ?? "No description available";
-      String newResponseType = jsonRes['response_type'] ?? "clear";
-      bool hasHighDanger = jsonRes['has_high_danger'] ?? false;
+      String newDescription = jsonResponse["description"] ?? "";
+      String newType = jsonResponse["response_type"] ?? "clear";
+      bool danger = jsonResponse["has_high_danger"] ?? false;
 
-      if (!mounted) return false;
-
-      if (newResponseType == "high_danger") {
-        SemanticsService.announce(newDescription, TextDirection.ltr);
-        if (responseType != "high_danger") {
-          await flutterTts.stop();
-          isSpeaking = false;
+      if (_shouldSpeak(newDescription, newType)) {
+        if (newType != "clear" && newType != "error") {
+          await _vibrate(newType);
         }
+        await _speakImmediate(newDescription, newType);
       }
 
-      if (_shouldSpeak(newDescription, newResponseType)) {
-        if (newResponseType != "clear" && newResponseType != "error") {
-          await _vibrate(newResponseType);
-        }
-        await _speakImmediate(newDescription, newResponseType);
+      if (mounted) {
+        setState(() {
+          description = newDescription;
+          responseType = newType;
+        });
       }
-
-      setState(() {
-        description = newDescription;
-        responseType = newResponseType;
-      });
-      return hasHighDanger;
+      return danger;
     } catch (e) {
-      print("ERROR IN YOLO DETECT: $e");
+      print("YOLO ERROR $e");
       return false;
     } finally {
       isProcessing = false;
@@ -387,69 +408,88 @@ class _CameraScreenState extends State<CameraScreen>
 
   @override
   void dispose() {
-    if (controller.value.isStreamingImages) {
-      controller.stopImageStream();
-    }
-    controller.dispose();
-    flutterTts.stop();
-    _audioRecorder.dispose();
     WidgetsBinding.instance.removeObserver(this);
+    if (controller != null) {
+      controller!.dispose();
+    }
+    _audioRecorder.dispose();
+    flutterTts.stop();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!controller.value.isInitialized) {
-      return Scaffold(
-        body: Semantics(
-          label: "Loading camera, please wait",
-          child: const Center(child: CircularProgressIndicator()),
-        ),
+    if (!_isCameraInitialized || controller == null) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator(color: Colors.white)),
       );
     }
 
+    final double bottomPadding = MediaQuery.of(context).padding.bottom;
+
     return Scaffold(
-      body: GestureDetector(
-        onLongPressStart: (_) async {
-          await _vibrate("low_danger");
-          _startRecording();
-        },
-        onLongPressEnd: (_) async {
-          _stopAndSendRecording();
-        },
-        child: Stack(
-          children: [
-            ExcludeSemantics(
-              child: SizedBox.expand(child: CameraPreview(controller)),
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          // 1) عرض بريفيو الكاميرا بكامل الشاشة
+          Transform.scale(
+            scale: 1 / (controller!.value.aspectRatio * MediaQuery.of(context).size.aspectRatio),
+            alignment: Alignment.topCenter,
+            child: CameraPreview(controller!),
+          ),
+
+          // 2) الطبقة الشفافة لالتقاط الـ Long Press
+          GestureDetector(
+            onLongPressStart: (_) => _startRecording(),
+            onLongPressEnd: (_) => _stopAndSendRecording(),
+            child: Container(
+              color: Colors.transparent,
+              width: double.infinity,
+              height: double.infinity,
             ),
-            Positioned(
-              bottom: 20,
-              left: 16,
-              right: 16,
-              child: Semantics(
-                label: description.isEmpty ? "Scanning" : description,
-                liveRegion: true,
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: _isRecording
-                        ? Colors.red.withValues(alpha: 0.85)
-                        : Colors.black.withValues(alpha: 0.75),
-                    borderRadius: BorderRadius.circular(12),
+          ),
+
+          // 3) بانر النصوص العائم بذكاء فوق شريط التنقل
+          Positioned(
+            bottom: bottomPadding + 35, 
+            left: 25,
+            right: 25,
+            child: IgnorePointer(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.8), 
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.2),
+                    width: 1.2,
                   ),
-                  child: Text(
-                    description.isEmpty ? "Scanning..." : description,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      height: 1.5,
-                    ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.4),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    )
+                  ]
+                ),
+                child: Text(
+                  _isRecording 
+                      ? description 
+                      : (description.isEmpty 
+                          ? (LanguageManager.isArabic ? "إضغط مطولاً للتحدث" : "Hold to speak") 
+                          : description),
+                  style: const TextStyle(
+                    color: Colors.white, 
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
                   ),
+                  textAlign: TextAlign.center,
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

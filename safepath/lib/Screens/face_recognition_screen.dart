@@ -31,7 +31,7 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
   String detectedName = "Scanning Face...";
   String status = "Safe-Path Active";
 
-  final String baseUrl = "http://192.168.100.15:8000";
+  final String baseUrl = "http://192.168.1.10:8000";
 
   @override
   void initState() {

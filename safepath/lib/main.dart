@@ -4,7 +4,7 @@ import 'package:camera/camera.dart';
 import 'Screens/home_screen.dart';
 import 'Screens/login_screen.dart';
 import 'Screens/signup_screen.dart';
-
+import 'Screens/language_screen.dart';
 List<CameraDescription> cameras = [];
 
 Future<void> main() async {
@@ -21,9 +21,11 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
 
-      initialRoute: '/login',
+initialRoute: '/language',
+
 
       routes: {
+        '/language': (context) => const LanguageScreen(),
         '/login': (context) => const LoginScreen(),
         '/signup': (context) => const SignupScreen(),
         '/home': (context) => HomeScreen(cameras: cameras),

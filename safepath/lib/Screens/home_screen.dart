@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:record/record.dart';
@@ -14,9 +15,16 @@ import 'history_screen.dart';
 import 'settings_screen.dart';
 import 'upload_screen.dart';
 
+import 'package:Safepath/services/language_manager.dart';
+import 'package:Safepath/services/language_string.dart';
+
 class HomeScreen extends StatefulWidget {
   final List<CameraDescription> cameras;
-  const HomeScreen({super.key, required this.cameras});
+
+  const HomeScreen({
+    super.key,
+    required this.cameras,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -25,10 +33,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int currentIndex = 0;
   late List<Widget> screens;
+
   final AudioRecorder _navAudioRecorder = AudioRecorder();
   final FlutterTts _navTts = FlutterTts();
+
   bool _isNavRecording = false;
   String _navAudioPath = "";
+
   static bool isSystemNavRecording = false;
 
   @override
@@ -39,7 +50,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _initTts() {
-    _navTts.setLanguage('en-US');
+    _navTts.setLanguage(LanguageManager.isArabic ? "ar-SA" : "en-US");
     _navTts.setSpeechRate(0.5);
   }
 
@@ -55,7 +66,9 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       ),
       const MoneyPage(),
-      FaceRecognitionScreen(cameras: widget.cameras),
+      FaceRecognitionScreen(
+        cameras: widget.cameras,
+      ),
       const HistoryScreen(),
       const SettingsScreen(),
       const UploadScreen(),
@@ -94,6 +107,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _stopAndNavigate() async {
     try {
       final path = await _navAudioRecorder.stop();
+
       setState(() {
         _isNavRecording = false;
         isSystemNavRecording = false;
@@ -101,10 +115,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (path != null) {
         final audioFile = File(path);
+
         var request = http.MultipartRequest(
           'POST',
-          Uri.parse('http://192.168.1.2:3000/command'),
+          Uri.parse('http://192.168.1.10:3000/command'),
         );
+
+        // تعديل المشكلة (3): إرسال اللغة لـ FastAPI ليفهم الأوامر العربية
+        request.fields['language'] = LanguageManager.isArabic ? "ar" : "en";
+
         request.files.add(
           await http.MultipartFile.fromPath(
             'audio',
@@ -112,42 +131,37 @@ class _HomeScreenState extends State<HomeScreen> {
             filename: 'command.wav',
           ),
         );
+
         request.files.add(
-          http.MultipartFile.fromBytes('image', [], filename: 'frame.jpg'),
+          http.MultipartFile.fromBytes(
+            'image',
+            [],
+            filename: 'frame.jpg',
+          ),
         );
 
         var response = await request.send();
+
         if (response.statusCode == 200) {
           var resStr = await response.stream.bytesToString();
           var jsonRes = jsonDecode(resStr);
 
-          if (jsonRes.containsKey('target_tab') &&
-              jsonRes['target_tab'] != "") {
+          if (jsonRes.containsKey('target_tab') && jsonRes['target_tab'] != "") {
             String targetTab = jsonRes['target_tab'];
-            String message = jsonRes['message'] ?? "Navigating";
+            String message = jsonRes['message'] ?? LanguageStrings.get("navigating");
 
+            await _navTts.setLanguage(LanguageManager.isArabic ? "ar-SA" : "en-US");
             await _navTts.speak(message);
 
             int newIndex = currentIndex;
+
             switch (targetTab) {
-              case "camera":
-                newIndex = 0;
-                break;
-              case "money":
-                newIndex = 1;
-                break;
-              case "person":
-                newIndex = 2;
-                break;
-              case "history":
-                newIndex = 3;
-                break;
-              case "settings":
-                newIndex = 4;
-                break;
-              case "upload":
-                newIndex = 5;
-                break;
+              case "camera": newIndex = 0; break;
+              case "money": newIndex = 1; break;
+              case "person": newIndex = 2; break;
+              case "history": newIndex = 3; break;
+              case "settings": newIndex = 4; break;
+              case "upload": newIndex = 5; break;
             }
 
             setState(() {
@@ -155,7 +169,8 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildScreens();
             });
           } else {
-            String desc = jsonRes['description'] ?? "Command not recognized";
+            String desc = jsonRes['description'] ?? LanguageStrings.get("commandNotRecognized");
+            await _navTts.setLanguage(LanguageManager.isArabic ? "ar-SA" : "en-US");
             await _navTts.speak(desc);
           }
         }
@@ -180,79 +195,123 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onLongPressStart: (_) async {
-        await _startNavListening();
-      },
-      onLongPressEnd: (_) async {
-        await _stopAndNavigate();
-      },
+      onLongPressStart: (_) async => await _startNavListening(),
+      onLongPressEnd: (_) async => await _stopAndNavigate(),
       child: Scaffold(
+        // 🛠️ تم إلغاء extendBody: true لمنع الشاشات من النزول والاختفاء خلف الـ Navigation Bar السفلي
+        extendBody: false, 
+        backgroundColor: Colors.black,
         body: Stack(
+          clipBehavior: Clip.none,
           children: [
+            // عرض الشاشة الحالية بشكل آمن فوق شريط التنقل
             screens[currentIndex],
 
+            // بانر "استمع الآن / الريكورد العالمي" في الأعلى
             if (_isNavRecording)
               Positioned(
-                top: 50,
-                left: 20,
-                right: 20,
-                child: Material(
-                  color: Colors.transparent,
+                top: MediaQuery.of(context).padding.top + 20,
+                left: 25,
+                right: 25,
+                child: IgnorePointer(
                   child: Container(
-                    padding: const EdgeInsets.all(14),
+                    padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
                     decoration: BoxDecoration(
-                      color: Colors.red.withValues(alpha: 0.9),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      "Listening... Say tab name (e.g., Money, Settings)",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
+                      color: Colors.black.withOpacity(0.85),
+                      borderRadius: BorderRadius.circular(25),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.2),
+                        width: 1.5,
                       ),
-                      textAlign: TextAlign.center,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.4),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.mic, color: Colors.redAccent, size: 28),
+                        const SizedBox(width: 12),
+                        Text(
+                          LanguageStrings.get("listening"),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
           ],
         ),
-        bottomNavigationBar: BottomNavigationBar(
-          currentIndex: currentIndex,
-          selectedItemColor: Colors.deepPurple,
-          unselectedItemColor: const Color.fromARGB(224, 126, 126, 126),
-          showSelectedLabels: true,
-          showUnselectedLabels: true,
-          onTap: (index) {
-            setState(() {
-              currentIndex = index;
-              _buildScreens();
-            });
-          },
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.camera_alt),
-              label: "Camera",
+        bottomNavigationBar: ClipRRect(
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(30),
+            topRight: Radius.circular(30),
+          ),
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Color.fromARGB(255, 9, 77, 132),
+                  Color(0xFF0D47A1),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.monetization_on),
-              label: "Money",
+            child: BottomNavigationBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              currentIndex: currentIndex,
+              type: BottomNavigationBarType.fixed,
+              selectedItemColor: Colors.white,
+              unselectedItemColor: Colors.white60,
+              showSelectedLabels: true,
+              showUnselectedLabels: true,
+              selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
+              onTap: (index) {
+                setState(() {
+                  currentIndex = index;
+                  _buildScreens();
+                });
+              },
+              items: [
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.camera_alt_outlined),
+                  label: LanguageStrings.get("camera"),
+                ),
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.payments_outlined),
+                  label: LanguageStrings.get("money"),
+                ),
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.person_outline),
+                  label: LanguageStrings.get("person"),
+                ),
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.history),
+                  label: LanguageStrings.get("history"),
+                ),
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.settings_outlined),
+                  label: LanguageStrings.get("settings"),
+                ),
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.upload_file_outlined),
+                  label: LanguageStrings.get("upload"),
+                ),
+              ],
             ),
-            BottomNavigationBarItem(icon: Icon(Icons.person), label: "Person"),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.history),
-              label: "History",
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.settings),
-              label: "Settings",
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.upload_file),
-              label: "Upload",
-            ),
-          ],
+          ),
         ),
       ),
     );
