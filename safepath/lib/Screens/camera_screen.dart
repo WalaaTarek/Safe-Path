@@ -11,6 +11,7 @@ import 'package:vibration/vibration.dart';
 import 'package:record/record.dart';
 
 import 'package:Safepath/services/language_manager.dart';
+import 'package:Safepath/services/language_string.dart';
 import 'package:Safepath/config/api_config.dart';
 
 class CameraScreen extends StatefulWidget {
@@ -27,8 +28,9 @@ class CameraScreen extends StatefulWidget {
   State<CameraScreen> createState() => _CameraScreenState();
 }
 
-class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver {
-  CameraController? controller; 
+class _CameraScreenState extends State<CameraScreen>
+    with WidgetsBindingObserver {
+  CameraController? controller;
   final FlutterTts flutterTts = FlutterTts();
   final AudioRecorder _audioRecorder = AudioRecorder();
 
@@ -122,7 +124,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
 
   void startProximityDetection() {
     if (controller == null || !controller!.value.isInitialized) return;
-    
+
     controller!.startImageStream((CameraImage image) {
       _processFrameLocally(image);
     });
@@ -168,7 +170,9 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
 
     if (!isSpeaking) {
       _speakImmediate(
-        LanguageManager.isArabic ? "انتبه، يوجد شيء قريب جداً" : "Watch out! Something is very close!",
+        LanguageManager.isArabic
+            ? "انتبه، يوجد شيء قريب جداً"
+            : "Watch out! Something is very close!",
         "high_danger",
       );
     }
@@ -188,7 +192,9 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
 
       bool danger = await detectWithYolo();
       await Future.delayed(
-        Duration(seconds: danger ? _dangerIntervalSeconds : _normalIntervalSeconds),
+        Duration(
+          seconds: danger ? _dangerIntervalSeconds : _normalIntervalSeconds,
+        ),
       );
       return true;
     });
@@ -211,7 +217,6 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
 
         setState(() {
           _isRecording = true;
-          description = LanguageManager.isArabic ? "استمع الآن" : "Listening...";
         });
       }
     } catch (e) {
@@ -272,10 +277,13 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         _isRecording = false;
       });
 
-      if (path != null && _isCameraInitialized && controller != null && controller!.value.isInitialized) {
+      if (path != null &&
+          _isCameraInitialized &&
+          controller != null &&
+          controller!.value.isInitialized) {
         final image = await controller!.takePicture();
         final imageBytes = await image.readAsBytes();
-        
+
         var request = http.MultipartRequest(
           'POST',
           Uri.parse(ApiConfig.command),
@@ -284,10 +292,18 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         request.fields['language'] = LanguageManager.isArabic ? "ar" : "en";
 
         request.files.add(
-          http.MultipartFile.fromBytes('image', imageBytes, filename: 'frame.jpg'),
+          http.MultipartFile.fromBytes(
+            'image',
+            imageBytes,
+            filename: 'frame.jpg',
+          ),
         );
         request.files.add(
-          await http.MultipartFile.fromPath('audio', path, filename: 'command.wav'),
+          await http.MultipartFile.fromPath(
+            'audio',
+            path,
+            filename: 'command.wav',
+          ),
         );
 
         var response = await request.send();
@@ -296,18 +312,32 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
 
         if (jsonResponse.containsKey("target_tab")) {
           String targetTab = jsonResponse["target_tab"];
-          String message = jsonResponse["message"] ?? (LanguageManager.isArabic ? "جاري الفتح" : "Opening");
+          String message =
+              jsonResponse["message"] ??
+              (LanguageManager.isArabic ? "جاري الفتح" : "Opening");
 
           await _speakImmediate(message, "clear");
 
           int index = 0;
           switch (targetTab) {
-            case "camera": index = 0; break;
-            case "money": index = 1; break;
-            case "person": index = 2; break;
-            case "history": index = 3; break;
-            case "settings": index = 4; break;
-            case "upload": index = 5; break;
+            case "camera":
+              index = 0;
+              break;
+            case "money":
+              index = 1;
+              break;
+            case "person":
+              index = 2;
+              break;
+            case "history":
+              index = 3;
+              break;
+            case "settings":
+              index = 4;
+              break;
+            case "upload":
+              index = 5;
+              break;
           }
           widget.onNavigate(index);
           return;
@@ -356,21 +386,20 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
 
   Future<bool> detectWithYolo() async {
     if (isProcessing) return false;
-    if (!_isCameraInitialized || controller == null || !controller!.value.isInitialized) return false;
+    if (!_isCameraInitialized ||
+        controller == null ||
+        !controller!.value.isInitialized) {
+      return false;
+    }
 
     try {
       isProcessing = true;
-      
+
       final picture = await controller!.takePicture();
       final bytes = await picture.readAsBytes();
 
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse(ApiConfig.detect),
-      );
-
+      var request = http.MultipartRequest('POST', Uri.parse(ApiConfig.detect));
       request.fields['language'] = LanguageManager.isArabic ? "ar" : "en";
-
       request.files.add(
         http.MultipartFile.fromBytes('file', bytes, filename: "frame.jpg"),
       );
@@ -406,17 +435,6 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   }
 
   @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    if (controller != null) {
-      controller!.dispose();
-    }
-    _audioRecorder.dispose();
-    flutterTts.stop();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     if (!_isCameraInitialized || controller == null) {
       return const Scaffold(
@@ -426,13 +444,17 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     }
 
     final double bottomPadding = MediaQuery.of(context).padding.bottom;
+    final bool isAr = LanguageManager.isArabic;
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
           Transform.scale(
-            scale: 1 / (controller!.value.aspectRatio * MediaQuery.of(context).size.aspectRatio),
+            scale:
+                1 /
+                (controller!.value.aspectRatio *
+                    MediaQuery.of(context).size.aspectRatio),
             alignment: Alignment.topCenter,
             child: CameraPreview(controller!),
           ),
@@ -447,44 +469,94 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
             ),
           ),
 
-          Positioned(
-            bottom: bottomPadding + 35, 
-            left: 25,
-            right: 25,
-            child: IgnorePointer(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.8), 
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.2),
-                    width: 1.2,
+          if (_isRecording)
+            Positioned(
+              bottom: bottomPadding + 35,
+              left: 20,
+              right: 20,
+              child: IgnorePointer(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 14,
+                    horizontal: 20,
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.4),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    )
-                  ]
-                ),
-                child: Text(
-                  _isRecording 
-                      ? description 
-                      : (description.isEmpty 
-                          ? (LanguageManager.isArabic ? "إضغط مطولاً للتحدث" : "Hold to speak") 
-                          : description),
-                  style: const TextStyle(
-                    color: Colors.white, 
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0D47A1),
+                    borderRadius: BorderRadius.circular(25),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF0D47A1).withOpacity(0.3),
+                        blurRadius: 15,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
                   ),
-                  textAlign: TextAlign.center,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.mic_rounded,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          LanguageStrings.get("listening"),
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: isAr ? 'Cairo' : null,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
+          if (!_isRecording && description.isNotEmpty)
+            Positioned(
+              bottom: bottomPadding + 35,
+              left: 25,
+              right: 25,
+              child: IgnorePointer(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 15,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.2),
+                      width: 1.2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.4),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    description,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

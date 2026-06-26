@@ -3,7 +3,7 @@ from fastapi import APIRouter
 router = APIRouter()
 
 
-users = []   # مؤقتًا بدل قاعدة البيانات
+users = []
 
 
 @router.post("/signup")
