@@ -1,10 +1,3 @@
-# translations.py
-
-
-# =========================
-# Objects Translation
-# =========================
-
 OBJECTS_AR = {
 
     "person": "شخص",
@@ -64,7 +57,6 @@ OBJECTS_AR = {
     "clock": "ساعة",
     "vase": "مزهرية",
 
-    # إضافات مهمة للمكفوفين
     "stairs": "سلم",
     "door": "باب",
     "window": "نافذة",
@@ -74,12 +66,6 @@ OBJECTS_AR = {
 
 }
 
-
-
-# =========================
-# Reverse Arabic Objects
-# =========================
-
 OBJECTS_REVERSE_AR = {
 
     arabic: english
@@ -87,12 +73,6 @@ OBJECTS_REVERSE_AR = {
     for english, arabic in OBJECTS_AR.items()
 
 }
-
-
-
-# =========================
-# Direction Translation
-# =========================
 
 DIRECTION_AR = {
 
@@ -104,12 +84,6 @@ DIRECTION_AR = {
 
 }
 
-
-
-# =========================
-# Distance Translation
-# =========================
-
 DISTANCE_AR = {
 
     "very close": "قريب جداً",
@@ -119,12 +93,6 @@ DISTANCE_AR = {
     "far": "بعيد"
 
 }
-
-
-
-# =========================
-# Tabs Translation
-# =========================
 
 TAB_AR = {
 
@@ -141,12 +109,6 @@ TAB_AR = {
     "upload": "رفع الملفات"
 
 }
-
-
-
-# =========================
-# General Messages
-# =========================
 
 MESSAGES_AR = {
 
@@ -166,12 +128,6 @@ MESSAGES_AR = {
         "جاري الفتح"
 
 }
-
-
-
-# =========================
-# Voice Commands Arabic
-# =========================
 
 VOICE_COMMANDS_AR = {
 
@@ -236,12 +192,6 @@ VOICE_COMMANDS_AR = {
     ]
 
 }
-
-
-
-# =========================
-# Translation Functions
-# =========================
 
 
 def translate_object(name, language="en"):

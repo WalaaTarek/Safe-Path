@@ -17,6 +17,7 @@ import 'upload_screen.dart';
 
 import 'package:Safepath/services/language_manager.dart';
 import 'package:Safepath/services/language_string.dart';
+import 'package:Safepath/config/api_config.dart';
 
 class HomeScreen extends StatefulWidget {
   final List<CameraDescription> cameras;
@@ -118,10 +119,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
         var request = http.MultipartRequest(
           'POST',
-          Uri.parse('http://192.168.1.10:3000/command'),
+          Uri.parse(ApiConfig.command),
         );
 
-        // تعديل المشكلة (3): إرسال اللغة لـ FastAPI ليفهم الأوامر العربية
         request.fields['language'] = LanguageManager.isArabic ? "ar" : "en";
 
         request.files.add(
@@ -198,16 +198,13 @@ class _HomeScreenState extends State<HomeScreen> {
       onLongPressStart: (_) async => await _startNavListening(),
       onLongPressEnd: (_) async => await _stopAndNavigate(),
       child: Scaffold(
-        // 🛠️ تم إلغاء extendBody: true لمنع الشاشات من النزول والاختفاء خلف الـ Navigation Bar السفلي
         extendBody: false, 
         backgroundColor: Colors.black,
         body: Stack(
           clipBehavior: Clip.none,
           children: [
-            // عرض الشاشة الحالية بشكل آمن فوق شريط التنقل
             screens[currentIndex],
 
-            // بانر "استمع الآن / الريكورد العالمي" في الأعلى
             if (_isNavRecording)
               Positioned(
                 top: MediaQuery.of(context).padding.top + 20,

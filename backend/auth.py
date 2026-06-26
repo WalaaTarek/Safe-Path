@@ -12,7 +12,6 @@ async def signup(data: dict):
     email = data["email"]
     password = data["password"]
 
-    # نشوف الإيميل موجود قبل كده ولا لا
     for user in users:
         if user["email"] == email:
             return {

@@ -11,6 +11,7 @@ import 'package:vibration/vibration.dart';
 import 'package:record/record.dart';
 
 import 'package:Safepath/services/language_manager.dart';
+import 'package:Safepath/config/api_config.dart';
 
 class CameraScreen extends StatefulWidget {
   final List<CameraDescription> cameras;
@@ -68,7 +69,6 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     }
 
     if (state == AppLifecycleState.inactive) {
-      // إيقاف الـ UI أولاً لتجنب رسم فريمات ميتة، ثم عمل dispose بأمان
       setState(() {
         _isCameraInitialized = false;
       });
@@ -255,7 +255,6 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     }
 
     if (newResponseType == "high_danger") {
-      // تم تصحيح اسم المتغير هنا وحذف الحرف الزائد بالكامل
       if (_lastHighDangerSpoken == null ||
           DateTime.now().difference(_lastHighDangerSpoken!).inSeconds >= 4) {
         _lastHighDangerSpoken = DateTime.now();
@@ -279,7 +278,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         
         var request = http.MultipartRequest(
           'POST',
-          Uri.parse('http://192.168.1.10:8000/command'),
+          Uri.parse(ApiConfig.command),
         );
 
         request.fields['language'] = LanguageManager.isArabic ? "ar" : "en";
@@ -367,7 +366,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
 
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('http://192.168.1.10:8000/detect'),
+        Uri.parse(ApiConfig.detect),
       );
 
       request.fields['language'] = LanguageManager.isArabic ? "ar" : "en";
@@ -432,14 +431,12 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // 1) عرض بريفيو الكاميرا بكامل الشاشة
           Transform.scale(
             scale: 1 / (controller!.value.aspectRatio * MediaQuery.of(context).size.aspectRatio),
             alignment: Alignment.topCenter,
             child: CameraPreview(controller!),
           ),
 
-          // 2) الطبقة الشفافة لالتقاط الـ Long Press
           GestureDetector(
             onLongPressStart: (_) => _startRecording(),
             onLongPressEnd: (_) => _stopAndSendRecording(),
@@ -450,7 +447,6 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
             ),
           ),
 
-          // 3) بانر النصوص العائم بذكاء فوق شريط التنقل
           Positioned(
             bottom: bottomPadding + 35, 
             left: 25,

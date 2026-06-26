@@ -8,6 +8,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:http_parser/http_parser.dart';
+import 'package:Safepath/config/api_config.dart';
 
 class FaceRecognitionScreen extends StatefulWidget {
   final List<CameraDescription> cameras;
@@ -31,7 +32,7 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
   String detectedName = "Scanning Face...";
   String status = "Safe-Path Active";
 
-  final String baseUrl = "http://192.168.1.10:8000";
+  final String baseUrl = ApiConfig.baseUrl;
 
   @override
   void initState() {

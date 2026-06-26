@@ -2,12 +2,13 @@ import os
 import cv2
 import gdown
 import numpy as np
-from fastapi import FastAPI, File, UploadFile
+from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import JSONResponse
 
 from ultralytics import YOLO
 
-app = FastAPI(title="YOLO Detection API")
+router = APIRouter()
+
 
 MODEL_PATH = "models/best.pt"
 FILE_ID = "1y41vbrMYa1C_8-PcejRUxEpnGtlCo5LT"
@@ -27,13 +28,7 @@ def download_model():
 download_model()
 model = YOLO(MODEL_PATH)
 
-
-@app.get("/")
-def home():
-    return {"message": "YOLO API Running via FastAPI"}
-
-
-@app.post("/predict")
+@router.post("/predict")
 async def predict(image: UploadFile = File(...)):
     try:
         image_bytes = await image.read()
@@ -59,8 +54,3 @@ async def predict(image: UploadFile = File(...)):
 
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"Internal Server Error: {str(e)}"})
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=6000)
