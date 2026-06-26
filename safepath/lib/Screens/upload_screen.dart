@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:Safepath/config/api_config.dart';
 
 class UploadScreen extends StatefulWidget {
   const UploadScreen({super.key});
@@ -51,7 +52,7 @@ class _UploadScreenState extends State<UploadScreen> {
     setState(() => isLoading = true);
 
     try {
-      var uri = Uri.parse("http://192.168.1.10:8000/ocr");
+      var uri = Uri.parse(ApiConfig.ocr);
 
       var request = http.MultipartRequest("POST", uri);
 

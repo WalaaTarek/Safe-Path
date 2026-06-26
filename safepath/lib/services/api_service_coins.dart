@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:Safepath/config/api_config.dart';
 
 class ApiService {
-  static const String url = "http://192.168.1.8:5000/predict";
+  static const String url = ApiConfig.predict;
 
   static Future<dynamic> uploadImage(File img) async {
     try {

@@ -4,8 +4,6 @@ class LanguageManager {
 
   static String currentLanguage = "en";
 
-
-  // حفظ اللغة
   static Future<void> saveLanguage(String language) async {
 
     currentLanguage = language;
@@ -18,9 +16,6 @@ class LanguageManager {
     );
   }
 
-
-
-  // جلب اللغة المحفوظة
   static Future<String> getLanguage() async {
 
     final prefs = await SharedPreferences.getInstance();
@@ -32,27 +27,18 @@ class LanguageManager {
     return currentLanguage;
   }
 
-
-
-  // تحميل اللغة عند بداية التطبيق
   static Future<void> loadLanguage() async {
 
     await getLanguage();
 
   }
 
-
-
-  // هل اللغة عربية؟
   static bool get isArabic {
 
     return currentLanguage == "ar";
 
   }
 
-
-
-  // هل اللغة إنجليزية؟
   static bool get isEnglish {
 
     return currentLanguage == "en";

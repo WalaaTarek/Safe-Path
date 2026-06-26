@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 import os
 import cv2
 import numpy as np
@@ -13,27 +13,21 @@ import gc
 from translator import translate_text
 from summarizer import summarize_if_large
 
-
-
-# ================== App Setup ==================
-app = Flask(__name__)
+router = APIRouter()
+    
 
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
-
-# ================== OCR Setup ==================
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 reader = easyocr.Reader(
     ['ar', 'en'],
     gpu=False,
-    model_storage_directory="E:\\easyocr_models"
+    model_storage_directory="C:\easyocr_models"
 )
 
-
-# ================== Image Processing ==================
 def preprocess_image(pil_image):
     img = np.array(pil_image)
 
@@ -59,8 +53,6 @@ def preprocess_image(pil_image):
 
     return thresh
 
-
-# ================== OCR Functions ==================
 def read_image_easy(path):
     result = reader.readtext(path, detail=0)
     return "\n".join(result)
@@ -76,8 +68,6 @@ def read_image_tesseract(path):
         config='--oem 3 --psm 6'
     )
 
-
-# ================== Text Cleaning ==================
 def clean_text(text):
     text = re.sub(r'[^\u0600-\u06FFa-zA-Z0-9\s\n.,!?():;/%-]', '', text)
     text = re.sub(r'(.)\1{2,}', r'\1', text)
@@ -88,23 +78,29 @@ def clean_text(text):
 
     return "\n".join(cleaned)
 
-
-# ================== Smart Image Reader ==================
 def smart_image_reader(path):
     try:
+        print("Trying EasyOCR...")
         easy_text = clean_text(read_image_easy(path))
+        print("EasyOCR:", easy_text)
+
         if len(easy_text.strip()) > 10:
             return easy_text
-    except:
-        pass
+
+    except Exception as e:
+        print("EasyOCR Error:", e)
 
     try:
-        return clean_text(read_image_tesseract(path))
-    except:
-        return "❌ Could not read text"
+        print("Trying Tesseract...")
+        tess_text = clean_text(read_image_tesseract(path))
+        print("Tesseract:", tess_text)
+        return tess_text
 
+    except Exception as e:
+        print("Tesseract Error:", e)
 
-# ================== PDF Reader ==================
+    return "Could not read text"
+
 def read_pdf(path):
     full_text = ""
 
@@ -125,7 +121,7 @@ def read_pdf(path):
 
     info = pdfinfo_from_path(
         path,
-        poppler_path=r"E:\Release-25.12.0-0\poppler-25.12.0\Library\bin"
+        poppler_path=r"C:\Release-25.12.0-0\poppler-25.12.0\Library\bin"
     )
 
     total_pages = info["Pages"]
@@ -137,7 +133,7 @@ def read_pdf(path):
                 first_page=i,
                 last_page=i,
                 dpi=180,
-                poppler_path=r"E:\Release-25.12.0-0\poppler-25.12.0\Library\bin"
+                poppler_path=r"C:\Release-25.12.0-0\poppler-25.12.0\Library\bin"
             )[0]
 
             img = np.array(page)
@@ -167,7 +163,6 @@ def read_pdf(path):
     return full_text
 
 
-# ================== File Router ==================
 def read_file(path):
     if path.lower().endswith((".png", ".jpg", ".jpeg")):
         return smart_image_reader(path)
@@ -177,81 +172,79 @@ def read_file(path):
 
     return "Unsupported file type"
 
-# ================== Routes ==================
-@app.route("/")
-def home():
-    return "OCR Backend Running"
-
-
-# ------------------ UPLOAD (FIXED) ------------------
-@app.route("/upload", methods=["POST"])
-def upload():
-    file = request.files["file"]
-
-    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
-    file.save(file_path)
+@router.post("/upload")
+async def upload(
+    file: UploadFile = File(...)
+):
+    file_path = os.path.join(
+        UPLOAD_FOLDER,
+        file.filename
+    )
 
     try:
+        contents = await file.read()
+
+        with open(file_path, "wb") as buffer:
+            buffer.write(contents)
+
         result = read_file(file_path)
 
-        return jsonify({
+        return {
             "text": result
-        })
+        }
 
     except Exception as e:
-        return jsonify({
-            "error": str(e)
-        }), 500
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
 
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
 
-
-# ------------------ OCR API (BEST FOR FLUTTER) ------------------
-@app.route("/ocr", methods=["POST"])
-def ocr():
-    file = request.files.get("file")
-    translate_flag = request.form.get("translate") == "true"
-
-    if not file:
-        return jsonify({"error": "No file uploaded"}), 400
-
-    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
-    file.save(file_path)
+@router.post("/ocr")
+async def ocr(
+    file: UploadFile = File(...),
+    translate: bool = Form(False)
+):
+    file_path = os.path.join(
+        UPLOAD_FOLDER,
+        file.filename
+    )
 
     try:
-        # 1️⃣ OCR
+        contents = await file.read()
+
+        with open(file_path, "wb") as buffer:
+            buffer.write(contents)
+
         result = read_file(file_path)
 
-        # 2️⃣ Clean safety check
         if not result:
             result = "No text detected"
 
-        # 3️⃣ Translate 
-        if translate_flag:
+        if translate:
             result = translate_text(result)
 
-        # 4️⃣ Summarize 
         try:
-            result = summarize_if_large(result, len(result.split()))
-        except:
+            result = summarize_if_large(
+                result,
+                len(result.split())
+            )
+        except Exception:
             pass
 
-        
-        return jsonify({
+        return {
             "text": result
-        })
+        }
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
 
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
-
-
-
-# ================== Run ==================
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)

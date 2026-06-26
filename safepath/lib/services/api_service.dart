@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'package:camera/camera.dart';
 import 'package:http/http.dart' as http;
+import 'package:Safepath/config/api_config.dart';
 
 class ApiService {
-  static const String baseUrl = "http://192.168.1.10:8000";
+  static const String baseUrl = ApiConfig.baseUrl;
 
   static Future<String> uploadImage(CameraController controller) async {
     try {

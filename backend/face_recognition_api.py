@@ -7,7 +7,7 @@ import mediapipe as mp
 import numpy as np
 import tensorflow as tf
 from PIL import Image, ImageOps
-from fastapi import (FastAPI, UploadFile, File, Form)
+from fastapi import (APIRouter, UploadFile, File, Form)
 from fastapi.responses import (JSONResponse)
 from firebase_admin import (credentials,firestore)
 from starlette.concurrency import (run_in_threadpool)
@@ -30,7 +30,7 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-app = FastAPI(title="Face Recognition Backend")
+router = APIRouter()
 
 interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
 
@@ -297,27 +297,7 @@ def add_new_face(name, description, embedding):
 
     return doc_ref[1].id
 
-@app.get("/face-recognition")
-def home():
-
-    try:
-
-        return {
-            "status": "online"
-        }
-
-    except Exception:
-
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "errorCode": "SERVICE_UNAVAILABLE",
-                "message": "Face Recognition Service is currently unavailable"
-            }
-        )
-
-@app.post(
+@router.post(
     "/face-recognition/recognize-face"
 )
 
@@ -411,7 +391,7 @@ async def recognize_face(
             }
         )
 
-@app.post(
+@router.post(
     "/face-recognition/save-new-face"
 )
 
@@ -506,7 +486,7 @@ async def save_new_face(name: str = Form(...), description: str = Form(...), fil
                 "message": "Unable to save face data"
             }
         )
-@app.put("/face-recognition/update-face")
+@router.put("/face-recognition/update-face")
 
 async def update_known_face(
     document_id: str = Form(...),
@@ -565,7 +545,7 @@ async def update_known_face(
             }
         )
     
-@app.delete("/face-recognition/delete-face")
+@router.delete("/face-recognition/delete-face")
 
 async def remove_face(
     document_id: str

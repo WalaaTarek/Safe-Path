@@ -14,13 +14,10 @@ class VoiceAssistant:
 
         self.is_speaking = False
 
-        # أصوات احترافية
         self.ar_voice = "ar-EG-SalmaNeural"
         self.en_voice = "en-US-JennyNeural"
 
-    # ====================================
-    # Detect Language
-    # ====================================
+    
     def detect_language(self, text):
 
         try:
@@ -34,18 +31,14 @@ class VoiceAssistant:
         except:
             return "en"
 
-    # ====================================
-    # Clean Text
-    # ====================================
+
     def clean_text(self, text):
 
         text = re.sub(r'\s+', ' ', text)
 
         return text.strip()
 
-    # ====================================
-    # Generate Speech
-    # ====================================
+
     async def generate_speech(self, text, voice, output_file):
 
         communicate = edge_tts.Communicate(
@@ -56,9 +49,6 @@ class VoiceAssistant:
 
         await communicate.save(output_file)
 
-    # ====================================
-    # Play Audio
-    # ====================================
     def play_audio(self, path):
 
         try:
@@ -71,9 +61,7 @@ class VoiceAssistant:
             if os.path.exists(path):
                 os.remove(path)
 
-    # ====================================
-    # Speak
-    # ====================================
+
     def speak(self, text):
 
         if not text.strip():
@@ -85,7 +73,6 @@ class VoiceAssistant:
 
         lang = self.detect_language(text)
 
-        # اختيار الصوت
         if lang == "ar":
             voice = self.ar_voice
         else:
@@ -118,9 +105,7 @@ class VoiceAssistant:
         except Exception as e:
             print("Speech Error:", e)
 
-    # ====================================
-    # Stop
-    # ====================================
+ 
     def stop(self):
 
         self.is_speaking = False

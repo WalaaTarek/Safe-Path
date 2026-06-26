@@ -1,3 +1,6 @@
+The object detection model
+https://drive.google.com/file/d/1Az5EsbTfEHGJCtlU74ogOiTr7549K_Pt/view?usp=sharing
+
 The face recognition model link
 https://drive.google.com/file/d/1vpKqJxEFG5mjJz-kyioldNj2AibQMM6P/view?usp=sharing
 

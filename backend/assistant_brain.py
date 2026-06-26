@@ -9,22 +9,18 @@ class AssistantBrain:
 
         command = command.lower()
 
-        # ================= OCR IMAGE =================
         if "image" in command or "read" in command:
             result = self.ocr(file_path)
 
-        # ================= PDF =================
         elif "pdf" in command:
             result = self.ocr(file_path)
 
-        # ================= TRANSLATE =================
         else:
             result = "Unknown command"
 
         if translate:
             result = self.translator(result)
 
-        # 🔊 Voice Response
         self.speaker.speak(result)
 
         return result

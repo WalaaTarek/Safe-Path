@@ -7,6 +7,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 
 import 'package:Safepath/services/language_manager.dart';
 import 'package:Safepath/services/language_string.dart';
+import 'package:Safepath/config/api_config.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -38,17 +39,13 @@ class _LoginScreenState extends State<LoginScreen> {
     await _flutterTts.setSpeechRate(0.5);
     await _flutterTts.setVolume(1.0);
 
-    // الحل الذكي: أول ما ينتهي نطق أي جملة، يتأكد ويشغل التعليمات
     _flutterTts.setCompletionHandler(() {
-      // بنشيل الـ Handler بعد ما يشتغل أول مرة عشان ما يكررش التعليمات مع كل نطق تاني
       _flutterTts.setCompletionHandler(() {}); 
       _speakHelpInstructions();
     });
 
-    // تأخير بسيط جداً لاستقرار الشاشة قبل بدء الترحيب
     await Future.delayed(const Duration(milliseconds: 400));
     
-    // نطق رسالة الترحيب (التعليمات هتشتغل لوحدها فور انتهائها بفضل الـ CompletionHandler)
     await _flutterTts.speak(LanguageStrings.get("welcome"));
   }
 
@@ -80,7 +77,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse("http://192.168.1.10:8000/login"),
+        Uri.parse(ApiConfig.login),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "email": emailController.text,

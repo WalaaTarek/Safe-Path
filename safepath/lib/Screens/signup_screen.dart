@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 
 import 'package:Safepath/services/language_manager.dart';
 import 'package:Safepath/services/language_string.dart';
-
+import 'package:Safepath/config/api_config.dart';
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
 
@@ -37,7 +37,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse("http://192.168.1.10:8000/signup"),
+        Uri.parse(ApiConfig.signup),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "username": nameController.text,
