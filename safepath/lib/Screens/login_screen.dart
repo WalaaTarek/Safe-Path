@@ -32,20 +32,11 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _initTtsAndWelcome() async {
-    await _flutterTts.setLanguage(
-      LanguageManager.isArabic ? "ar-SA" : "en-US",
-    );
-
+    await _flutterTts.setLanguage(LanguageManager.isArabic ? "ar-SA" : "en-US");
     await _flutterTts.setSpeechRate(0.5);
     await _flutterTts.setVolume(1.0);
 
-    _flutterTts.setCompletionHandler(() {
-      _flutterTts.setCompletionHandler(() {}); 
-      _speakHelpInstructions();
-    });
-
     await Future.delayed(const Duration(milliseconds: 400));
-    
     await _flutterTts.speak(LanguageStrings.get("welcome"));
   }
 
@@ -54,12 +45,9 @@ class _LoginScreenState extends State<LoginScreen> {
     await _flutterTts.speak(text);
   }
 
-  void _speakHelpInstructions() {
-    _flutterTts.speak(
-      LanguageManager.isArabic
-          ? "طريقة استخدام التطبيق: يمكنك الضغط مطولا على الشاشة للحصول على التعليمات."
-          : "How to use the application: Long press on the screen for help instructions.",
-    );
+  void _speakHelpInstructions() async {
+    await _flutterTts.stop();
+    await _flutterTts.speak(LanguageStrings.get("helpInstructions"));
   }
 
   @override
@@ -96,9 +84,9 @@ class _LoginScreenState extends State<LoginScreen> {
         await _speak(errorMsg);
 
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorMsg)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(errorMsg)));
       }
     } catch (e) {
       await _speak(LanguageStrings.get("connectionError"));
@@ -128,10 +116,7 @@ class _LoginScreenState extends State<LoginScreen> {
           height: double.infinity,
           decoration: const BoxDecoration(
             gradient: LinearGradient(
-              colors: [
-                Color.fromARGB(255, 9, 77, 132),
-                Color(0xFF0D47A1),
-              ],
+              colors: [Color(0xFF030A16), Color(0xFF0A1E3D), Color(0xFF0D2B5C)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -139,114 +124,142 @@ class _LoginScreenState extends State<LoginScreen> {
           child: SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
+                padding: const EdgeInsets.symmetric(horizontal: 30),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(35),
+                  borderRadius: BorderRadius.circular(28),
                   child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                     child: Container(
-                      padding: const EdgeInsets.all(25),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 35,
+                        horizontal: 24,
+                      ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(35),
+                        color: Colors.white.withOpacity(0.06),
+                        borderRadius: BorderRadius.circular(28),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.25),
-                          width: 1.5,
+                          color: Colors.white.withOpacity(0.15),
+                          width: 1.2,
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.15),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
                       ),
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          /// Logo
                           Container(
-                            width: 95,
-                            height: 95,
+                            width: 70,
+                            height: 70,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF42A5F5), Color(0xFF1565C0)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
+                              color: const Color(0xFF1A56DB).withOpacity(0.2),
+                              border: Border.all(
+                                color: const Color(0xFF60A5FA).withOpacity(0.6),
+                                width: 1.5,
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.blue.withOpacity(0.4),
-                                  blurRadius: 20,
-                                  spreadRadius: 2,
+                                  color: const Color(
+                                    0xFF3B82F6,
+                                  ).withOpacity(0.3),
+                                  blurRadius: 15,
+                                  spreadRadius: 1,
                                 ),
                               ],
                             ),
                             child: const Icon(
-                              Icons.remove_red_eye_outlined,
-                              size: 50,
-                              color: Colors.white,
+                              Icons.remove_red_eye_rounded,
+                              size: 32,
+                              color: Color(0xFF93C5FD),
                             ),
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 16),
                           const Text(
                             "SafePath",
                             style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w900,
                               color: Colors.white,
+                              letterSpacing: 1.2,
                             ),
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 4),
                           Text(
                             LanguageStrings.get("login"),
-                            style: const TextStyle(
-                              fontSize: 18,
-                              color: Colors.white70,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.white.withOpacity(0.5),
+                              fontWeight: FontWeight.w400,
                             ),
                           ),
-                          const SizedBox(height: 35),
-                          
-                          /// حقل الإيميل
+                          const SizedBox(height: 30),
+
                           TextField(
                             controller: emailController,
                             keyboardType: TextInputType.emailAddress,
-                            style: const TextStyle(color: Colors.black87),
+                            cursorColor: Colors.white,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                            ),
                             decoration: InputDecoration(
-                              hintText: LanguageStrings.get("email"), 
-                              hintStyle: const TextStyle(color: Colors.grey),
-                              prefixIcon: const Icon(
-                                Icons.email_outlined,
-                                color: Color(0xFF0D47A1),
+                              hintText: LanguageStrings.get("email"),
+                              hintStyle: TextStyle(
+                                color: Colors.white.withOpacity(0.35),
+                                fontSize: 13,
+                              ),
+                              prefixIcon: Icon(
+                                Icons.email_rounded,
+                                color: Colors.white.withOpacity(0.6),
+                                size: 20,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 14,
+                                horizontal: 16,
                               ),
                               filled: true,
-                              fillColor: Colors.white.withOpacity(0.9),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(18),
-                                borderSide: BorderSide.none,
+                              fillColor: Colors.white.withOpacity(0.05),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide(
+                                  color: Colors.white.withOpacity(0.1),
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFF3B82F6),
+                                  width: 1.5,
+                                ),
                               ),
                             ),
                           ),
-                          const SizedBox(height: 20),
-                          
-                          /// حقل الباسورد
+                          const SizedBox(height: 16),
+
                           TextField(
                             controller: passwordController,
                             obscureText: _obscurePassword,
-                            style: const TextStyle(color: Colors.black87),
+                            cursorColor: Colors.white,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                            ),
                             decoration: InputDecoration(
                               hintText: LanguageStrings.get("password"),
-                              hintStyle: const TextStyle(color: Colors.grey),
-                              prefixIcon: const Icon(
-                                Icons.lock_outline,
-                                color: Color(0xFF0D47A1),
+                              hintStyle: TextStyle(
+                                color: Colors.white.withOpacity(0.35),
+                                fontSize: 13,
+                              ),
+                              prefixIcon: Icon(
+                                Icons.lock_rounded,
+                                color: Colors.white.withOpacity(0.6),
+                                size: 20,
                               ),
                               suffixIcon: IconButton(
                                 icon: Icon(
                                   _obscurePassword
-                                      ? Icons.visibility_off
-                                      : Icons.visibility,
-                                  color: const Color(0xFF0D47A1),
+                                      ? Icons.visibility_off_rounded
+                                      : Icons.visibility_rounded,
+                                  color: Colors.white.withOpacity(0.6),
+                                  size: 18,
                                 ),
                                 onPressed: () {
                                   setState(() {
@@ -254,40 +267,79 @@ class _LoginScreenState extends State<LoginScreen> {
                                   });
                                 },
                               ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 14,
+                                horizontal: 16,
+                              ),
                               filled: true,
-                              fillColor: Colors.white.withOpacity(0.9),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(18),
-                                borderSide: BorderSide.none,
+                              fillColor: Colors.white.withOpacity(0.05),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide(
+                                  color: Colors.white.withOpacity(0.1),
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFF3B82F6),
+                                  width: 1.5,
+                                ),
                               ),
                             ),
                           ),
-                          const SizedBox(height: 30),
-                          SizedBox(
+                          const SizedBox(height: 25),
+
+                          Container(
                             width: double.infinity,
-                            height: 55,
+                            height: 46,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(14),
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(
+                                    0xFF2563EB,
+                                  ).withOpacity(0.3),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
                             child: ElevatedButton(
                               onPressed: _isLoading ? null : login,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF1565C0),
+                                backgroundColor: Colors.transparent,
+                                shadowColor: Colors.transparent,
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(18),
+                                  borderRadius: BorderRadius.circular(14),
                                 ),
                               ),
                               child: _isLoading
-                                  ? const CircularProgressIndicator(
-                                      color: Colors.white,
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
                                     )
                                   : Text(
                                       LanguageStrings.get("signIn"),
                                       style: const TextStyle(
-                                        fontSize: 18,
+                                        fontSize: 15,
                                         color: Colors.white,
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
                             ),
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 12),
+
                           TextButton(
                             onPressed: () {
                               Navigator.pushNamed(context, "/signup");
@@ -295,9 +347,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: Text(
                               LanguageStrings.get("createAccount"),
                               style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF60A5FA),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ),

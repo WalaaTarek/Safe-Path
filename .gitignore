@@ -6,16 +6,7 @@ __pycache__/
 
 # Database
 *.db
-users.db
 
 # Flutter
 build/
 .dart_tool/
-*.pt
-
-.env
-venv/
-
-
-# firebase related
-firebase.json

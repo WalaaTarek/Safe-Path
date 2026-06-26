@@ -4,6 +4,8 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:Safepath/services/api_service_coins.dart';
+import 'package:Safepath/services/language_string.dart';
+import 'package:Safepath/services/language_manager.dart';
 
 class MoneyPage extends StatefulWidget {
   const MoneyPage({super.key});
@@ -30,16 +32,15 @@ class _MoneyPageState extends State<MoneyPage> {
     initTts();
 
     Future.delayed(const Duration(seconds: 2), () async {
-      await flutterTts.speak("Money detection started");
+      await flutterTts.speak(LanguageStrings.get("moneyDetectionStarted"));
     });
   }
 
   void initTts() async {
-    await flutterTts.setLanguage("en-US");
+    await flutterTts.setLanguage(LanguageManager.isArabic ? "ar-SA" : "en-US");
     await flutterTts.setSpeechRate(0.5);
     await flutterTts.setVolume(1.0);
     await flutterTts.setPitch(1.0);
-
     await flutterTts.awaitSpeakCompletion(true);
   }
 
@@ -102,11 +103,11 @@ class _MoneyPageState extends State<MoneyPage> {
     String textToSpeak = "";
 
     for (var item in result) {
-      textToSpeak += "${item["class"]} pounds. ";
+      String className = item["class"].toString();
+      textToSpeak += "${LanguageStrings.get("money_$className")}. ";
     }
 
     if (textToSpeak == lastSpoken) return;
-
     lastSpoken = textToSpeak;
 
     await flutterTts.stop();
@@ -144,9 +145,9 @@ class _MoneyPageState extends State<MoneyPage> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: result.isEmpty
-                    ? const Text(
-                        "No detection yet",
-                        style: TextStyle(
+                    ? Text(
+                        LanguageStrings.get("noDetection"),
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 15,
                           height: 1.5,
@@ -156,8 +157,9 @@ class _MoneyPageState extends State<MoneyPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: result.map((item) {
+                          String className = item["class"].toString();
                           return Text(
-                            "${item["class"]}",
+                            LanguageStrings.get("money_$className"),
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 15,

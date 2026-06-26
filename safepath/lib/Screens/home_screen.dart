@@ -11,7 +11,6 @@ import 'package:vibration/vibration.dart';
 import 'package:Safepath/Screens/money_page.dart';
 import 'camera_screen.dart';
 import 'face_recognition_screen.dart';
-import 'history_screen.dart';
 import 'settings_screen.dart';
 import 'upload_screen.dart';
 
@@ -22,10 +21,7 @@ import 'package:Safepath/config/api_config.dart';
 class HomeScreen extends StatefulWidget {
   final List<CameraDescription> cameras;
 
-  const HomeScreen({
-    super.key,
-    required this.cameras,
-  });
+  const HomeScreen({super.key, required this.cameras});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -67,12 +63,16 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       ),
       const MoneyPage(),
-      FaceRecognitionScreen(
-        cameras: widget.cameras,
-      ),
-      const HistoryScreen(),
-      const SettingsScreen(),
+      FaceRecognitionScreen(cameras: widget.cameras),
       const UploadScreen(),
+      SettingsScreen(
+        onLanguageChanged: () {
+          setState(() {
+            _initTts();
+            _buildScreens();
+          });
+        },
+      ),
     ];
   }
 
@@ -133,11 +133,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
 
         request.files.add(
-          http.MultipartFile.fromBytes(
-            'image',
-            [],
-            filename: 'frame.jpg',
-          ),
+          http.MultipartFile.fromBytes('image', [], filename: 'frame.jpg'),
         );
 
         var response = await request.send();
@@ -146,22 +142,35 @@ class _HomeScreenState extends State<HomeScreen> {
           var resStr = await response.stream.bytesToString();
           var jsonRes = jsonDecode(resStr);
 
-          if (jsonRes.containsKey('target_tab') && jsonRes['target_tab'] != "") {
+          if (jsonRes.containsKey('target_tab') &&
+              jsonRes['target_tab'] != "") {
             String targetTab = jsonRes['target_tab'];
-            String message = jsonRes['message'] ?? LanguageStrings.get("navigating");
+            String message =
+                jsonRes['message'] ?? LanguageStrings.get("navigating");
 
-            await _navTts.setLanguage(LanguageManager.isArabic ? "ar-SA" : "en-US");
+            await _navTts.setLanguage(
+              LanguageManager.isArabic ? "ar-SA" : "en-US",
+            );
             await _navTts.speak(message);
 
             int newIndex = currentIndex;
 
             switch (targetTab) {
-              case "camera": newIndex = 0; break;
-              case "money": newIndex = 1; break;
-              case "person": newIndex = 2; break;
-              case "history": newIndex = 3; break;
-              case "settings": newIndex = 4; break;
-              case "upload": newIndex = 5; break;
+              case "camera":
+                newIndex = 0;
+                break;
+              case "money":
+                newIndex = 1;
+                break;
+              case "person":
+                newIndex = 2;
+                break;
+              case "upload":
+                newIndex = 3;
+                break;
+              case "settings":
+                newIndex = 4;
+                break;
             }
 
             setState(() {
@@ -169,8 +178,12 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildScreens();
             });
           } else {
-            String desc = jsonRes['description'] ?? LanguageStrings.get("commandNotRecognized");
-            await _navTts.setLanguage(LanguageManager.isArabic ? "ar-SA" : "en-US");
+            String desc =
+                jsonRes['description'] ??
+                LanguageStrings.get("commandNotRecognized");
+            await _navTts.setLanguage(
+              LanguageManager.isArabic ? "ar-SA" : "en-US",
+            );
             await _navTts.speak(desc);
           }
         }
@@ -198,7 +211,7 @@ class _HomeScreenState extends State<HomeScreen> {
       onLongPressStart: (_) async => await _startNavListening(),
       onLongPressEnd: (_) async => await _stopAndNavigate(),
       child: Scaffold(
-        extendBody: false, 
+        extendBody: false,
         backgroundColor: Colors.black,
         body: Stack(
           clipBehavior: Clip.none,
@@ -208,23 +221,22 @@ class _HomeScreenState extends State<HomeScreen> {
             if (_isNavRecording)
               Positioned(
                 top: MediaQuery.of(context).padding.top + 20,
-                left: 25,
-                right: 25,
+                left: 20,
+                right: 20,
                 child: IgnorePointer(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 14,
+                      horizontal: 20,
+                    ),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.85),
+                      color: const Color(0xFF0D47A1),
                       borderRadius: BorderRadius.circular(25),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.2),
-                        width: 1.5,
-                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.4),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
+                          color: const Color(0xFF0D47A1).withOpacity(0.3),
+                          blurRadius: 15,
+                          offset: const Offset(0, 6),
                         ),
                       ],
                     ),
@@ -232,14 +244,22 @@ class _HomeScreenState extends State<HomeScreen> {
                       mainAxisSize: MainAxisSize.min,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.mic, color: Colors.redAccent, size: 28),
+                        const Icon(
+                          Icons.mic_rounded,
+                          color: Colors.white,
+                          size: 24,
+                        ),
                         const SizedBox(width: 12),
-                        Text(
-                          LanguageStrings.get("listening"),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                        Expanded(
+                          child: Text(
+                            LanguageStrings.get("listening"),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
@@ -249,65 +269,50 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
           ],
         ),
-        bottomNavigationBar: ClipRRect(
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(30),
-            topRight: Radius.circular(30),
-          ),
-          child: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Color.fromARGB(255, 9, 77, 132),
-                  Color(0xFF0D47A1),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+        bottomNavigationBar: Container(
+          color: Colors.white,
+          child: BottomNavigationBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            currentIndex: currentIndex,
+            type: BottomNavigationBarType.fixed,
+            selectedItemColor: const Color(0xFF0D47A1),
+            unselectedItemColor: const Color(0xFF0D47A1).withOpacity(0.55),
+            showSelectedLabels: true,
+            showUnselectedLabels: true,
+            selectedLabelStyle: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
+            unselectedLabelStyle: const TextStyle(fontSize: 12),
+            onTap: (index) {
+              setState(() {
+                currentIndex = index;
+                _buildScreens();
+              });
+            },
+            items: [
+              BottomNavigationBarItem(
+                icon: const Icon(Icons.photo_camera_rounded),
+                label: LanguageStrings.get("camera"),
               ),
-            ),
-            child: BottomNavigationBar(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              currentIndex: currentIndex,
-              type: BottomNavigationBarType.fixed,
-              selectedItemColor: Colors.white,
-              unselectedItemColor: Colors.white60,
-              showSelectedLabels: true,
-              showUnselectedLabels: true,
-              selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
-              onTap: (index) {
-                setState(() {
-                  currentIndex = index;
-                  _buildScreens();
-                });
-              },
-              items: [
-                BottomNavigationBarItem(
-                  icon: const Icon(Icons.camera_alt_outlined),
-                  label: LanguageStrings.get("camera"),
-                ),
-                BottomNavigationBarItem(
-                  icon: const Icon(Icons.payments_outlined),
-                  label: LanguageStrings.get("money"),
-                ),
-                BottomNavigationBarItem(
-                  icon: const Icon(Icons.person_outline),
-                  label: LanguageStrings.get("person"),
-                ),
-                BottomNavigationBarItem(
-                  icon: const Icon(Icons.history),
-                  label: LanguageStrings.get("history"),
-                ),
-                BottomNavigationBarItem(
-                  icon: const Icon(Icons.settings_outlined),
-                  label: LanguageStrings.get("settings"),
-                ),
-                BottomNavigationBarItem(
-                  icon: const Icon(Icons.upload_file_outlined),
-                  label: LanguageStrings.get("upload"),
-                ),
-              ],
-            ),
+              BottomNavigationBarItem(
+                icon: const Icon(Icons.account_balance_wallet_rounded),
+                label: LanguageStrings.get("money"),
+              ),
+              BottomNavigationBarItem(
+                icon: const Icon(Icons.account_circle_rounded),
+                label: LanguageStrings.get("person"),
+              ),
+              BottomNavigationBarItem(
+                icon: const Icon(Icons.cloud_upload_rounded),
+                label: LanguageStrings.get("upload"),
+              ),
+              BottomNavigationBarItem(
+                icon: const Icon(Icons.settings_rounded),
+                label: LanguageStrings.get("settings"),
+              ),
+            ],
           ),
         ),
       ),
