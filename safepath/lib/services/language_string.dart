@@ -50,6 +50,16 @@ class LanguageStrings {
         "4 قراءة المستندات والملفات الذكية.",
 
     "longPressHint": "اضغط مطولاً على الشاشة لمعرفة طريقة الاستخدام.",
+
+    "ocrScanner": "ماسح المستندات ",
+    "noImageSelected": "لم يتم اختيار صورة بعد",
+    "pickImage": "اختر صورة من الاستوديو",
+    "translateToArabic": "ترجمة النص إلى العربية",
+    "processing": "جاري المعالجة وقراءة النص...",
+    "uploadBtn": "رفع وتحليل الصورة",
+    "result": "النتيجة",
+    "extractedText": "النص المترجم",
+    "readAloud": "استماع للنص",
   };
 
   static Map<String, String> english = {
@@ -102,6 +112,16 @@ class LanguageStrings {
         "4, smart document and file reading.",
 
     "longPressHint": "Long press on the screen to learn how to use the app.",
+
+    "ocrScanner": "OCR Scanner",
+    "noImageSelected": "No Image Selected",
+    "pickImage": "Pick Image",
+    "translateToArabic": "Translate to Arabic",
+    "processing": "Processing...",
+    "uploadBtn": "Upload & Scan",
+    "result": "Result",
+    "extractedText": "Extracted Text",
+    "readAloud": "Read Aloud",
   };
 
   static String get(String key) {
