@@ -125,50 +125,55 @@ class _MoneyPageState extends State<MoneyPage> {
   @override
   Widget build(BuildContext context) {
     if (_controller == null || !_controller!.value.isInitialized) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator(color: Colors.white)),
+      );
     }
 
+    final double bottomPadding =
+        MediaQuery.of(context).padding.bottom + kBottomNavigationBarHeight - 15;
+
     return Scaffold(
+      extendBody: true,
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
           Positioned.fill(child: CameraPreview(_controller!)),
           Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.75),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: result.isEmpty
-                    ? Text(
-                        LanguageStrings.get("noDetection"),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          height: 1.5,
-                        ),
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: result.map((item) {
-                          String className = item["class"].toString();
-                          return Text(
-                            LanguageStrings.get("money_$className"),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              height: 1.5,
-                            ),
-                          );
-                        }).toList(),
-                      ),
+            bottom: bottomPadding,
+            left: 16,
+            right: 16,
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.75),
+                borderRadius: BorderRadius.circular(12),
               ),
+              child: result.isEmpty
+                  ? Text(
+                      LanguageStrings.get("noDetection"),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        height: 1.5,
+                      ),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: result.map((item) {
+                        String className = item["class"].toString();
+                        return Text(
+                          LanguageStrings.get("money_$className"),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            height: 1.5,
+                          ),
+                        );
+                      }).toList(),
+                    ),
             ),
           ),
         ],

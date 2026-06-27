@@ -522,6 +522,7 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
     if (controller == null ||
         !controller!.value.isInitialized ||
@@ -534,14 +535,18 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
       );
     }
 
+    final double bottomPadding =
+        MediaQuery.of(context).padding.bottom + kBottomNavigationBarHeight - 15;
+
     return Scaffold(
+      extendBody: true,
       backgroundColor: Colors.black,
       body: Stack(
         children: [
           SizedBox.expand(child: CameraPreview(controller!)),
 
           Positioned(
-            bottom: 16,
+            bottom: bottomPadding,
             left: 16,
             right: 16,
             child: Semantics(

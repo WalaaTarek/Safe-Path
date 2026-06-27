@@ -211,8 +211,8 @@ class _HomeScreenState extends State<HomeScreen> {
       onLongPressStart: (_) async => await _startNavListening(),
       onLongPressEnd: (_) async => await _stopAndNavigate(),
       child: Scaffold(
-        extendBody: false,
-        backgroundColor: Colors.black,
+        backgroundColor: Colors.white,
+        extendBody: true,
         body: Stack(
           clipBehavior: Clip.none,
           children: [
@@ -269,50 +269,58 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
           ],
         ),
-        bottomNavigationBar: Container(
-          color: Colors.white,
-          child: BottomNavigationBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            currentIndex: currentIndex,
-            type: BottomNavigationBarType.fixed,
-            selectedItemColor: const Color(0xFF0D47A1),
-            unselectedItemColor: const Color(0xFF0D47A1).withOpacity(0.55),
-            showSelectedLabels: true,
-            showUnselectedLabels: true,
-            selectedLabelStyle: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
+        bottomNavigationBar: ClipRRect(
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(30),
+            topRight: Radius.circular(30),
+          ),
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color.fromARGB(255, 9, 77, 132), Color(0xFF0D47A1)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
             ),
-            unselectedLabelStyle: const TextStyle(fontSize: 12),
-            onTap: (index) {
-              setState(() {
-                currentIndex = index;
-                _buildScreens();
-              });
-            },
-            items: [
-              BottomNavigationBarItem(
-                icon: const Icon(Icons.photo_camera_rounded),
-                label: LanguageStrings.get("camera"),
-              ),
-              BottomNavigationBarItem(
-                icon: const Icon(Icons.account_balance_wallet_rounded),
-                label: LanguageStrings.get("money"),
-              ),
-              BottomNavigationBarItem(
-                icon: const Icon(Icons.account_circle_rounded),
-                label: LanguageStrings.get("person"),
-              ),
-              BottomNavigationBarItem(
-                icon: const Icon(Icons.cloud_upload_rounded),
-                label: LanguageStrings.get("upload"),
-              ),
-              BottomNavigationBarItem(
-                icon: const Icon(Icons.settings_rounded),
-                label: LanguageStrings.get("settings"),
-              ),
-            ],
+            child: BottomNavigationBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              currentIndex: currentIndex,
+              type: BottomNavigationBarType.fixed,
+              selectedItemColor: Colors.white,
+              unselectedItemColor: Colors.white60,
+              showSelectedLabels: true,
+              showUnselectedLabels: true,
+              selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
+              onTap: (index) {
+                setState(() {
+                  currentIndex = index;
+                  _buildScreens();
+                });
+              },
+              items: [
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.camera_alt_outlined),
+                  label: LanguageStrings.get("camera"),
+                ),
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.payments_outlined),
+                  label: LanguageStrings.get("money"),
+                ),
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.person_outline),
+                  label: LanguageStrings.get("person"),
+                ),
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.upload_file_outlined),
+                  label: LanguageStrings.get("upload"),
+                ),
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.settings_outlined),
+                  label: LanguageStrings.get("settings"),
+                ),
+              ],
+            ),
           ),
         ),
       ),
