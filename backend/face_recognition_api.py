@@ -1,16 +1,19 @@
 import io
 import os
 import threading
+
 import cv2
-import firebase_admin
-import mediapipe as mp
 import numpy as np
 import tensorflow as tf
+
 from PIL import Image, ImageOps
-from fastapi import (APIRouter, UploadFile, File, Form)
-from fastapi.responses import (JSONResponse)
-from firebase_admin import (credentials,firestore)
-from starlette.concurrency import (run_in_threadpool)
+
+from fastapi import APIRouter, UploadFile, File, Form
+from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
+
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 BASE_DIR = os.path.dirname(
     os.path.abspath(__file__)
@@ -19,39 +22,166 @@ BASE_DIR = os.path.dirname(
 MODEL_PATH = os.path.join(
     BASE_DIR,
     "models",
-    "face_recognition_model.tflite",
+    "face_recognition_model.tflite"
 )
 
 FIREBASE_CREDENTIALS = "firebase.json"
 
 if not firebase_admin._apps:
-    cred = credentials.Certificate(FIREBASE_CREDENTIALS)
+
+    cred = credentials.Certificate(
+        FIREBASE_CREDENTIALS
+    )
+
     firebase_admin.initialize_app(cred)
 
 db = firestore.client()
 
 router = APIRouter()
 
-interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
+interpreter = tf.lite.Interpreter(
+    model_path=MODEL_PATH
+)
 
 interpreter.allocate_tensors()
 
-input_details = (interpreter.get_input_details())
+input_details = interpreter.get_input_details()
 
-output_details = (interpreter.get_output_details())
+output_details = interpreter.get_output_details()
 
 model_lock = threading.Lock()
 
+CASCADE_PATH = (
+    cv2.data.haarcascades +
+    "haarcascade_frontalface_default.xml"
+)
+
+face_detector = cv2.CascadeClassifier(
+    CASCADE_PATH
+)
+
 INPUT_SIZE = 100
-SIMILARITY_THRESHOLD = 0.5
 
-mp_face_detection = (mp.solutions.face_detection)
+SIMILARITY_THRESHOLD = 0.51
 
-face_detector = (mp_face_detection.FaceDetection(model_selection=0,min_detection_confidence=0.6,))
+MAX_EMBEDDINGS_PER_PERSON = 5
 
-def get_face_document(
-    document_id: str
-):
+DUPLICATE_THRESHOLD = 0.15
+
+def preprocess_image(image_bytes):
+
+    image = Image.open(
+        io.BytesIO(image_bytes)
+    )
+
+    image = ImageOps.exif_transpose(image)
+
+    image = image.convert("RGB")
+
+    image = np.array(image)
+
+    gray = cv2.cvtColor(
+        image,
+        cv2.COLOR_RGB2GRAY
+    )
+
+    faces = face_detector.detectMultiScale(
+
+        gray,
+
+        scaleFactor=1.1,
+
+        minNeighbors=5,
+
+        minSize=(80, 80)
+
+    )
+
+    if len(faces) == 0:
+
+        return None
+
+    x, y, w, h = max(
+        faces,
+        key=lambda f: f[2] * f[3]
+    )
+
+    margin_x = int(0.20 * w)
+    margin_y = int(0.20 * h)
+
+    x1 = max(0, x - margin_x)
+    y1 = max(0, y - margin_y)
+
+    x2 = min(
+        image.shape[1],
+        x + w + margin_x
+    )
+
+    y2 = min(
+        image.shape[0],
+        y + h + margin_y
+    )
+
+    face = image[
+        y1:y2,
+        x1:x2
+    ]
+
+    face = cv2.resize(
+        face,
+        (
+            INPUT_SIZE,
+            INPUT_SIZE
+        )
+    )
+
+    face = face.astype(
+        np.float32
+    )
+
+    face /= 255.0
+
+    face = np.expand_dims(
+        face,
+        axis=0
+    )
+
+    return face
+
+def get_embedding(image_bytes):
+
+    image = preprocess_image(
+        image_bytes
+    )
+
+    if image is None:
+
+        return None
+
+    with model_lock:
+
+        interpreter.set_tensor(
+            input_details[0]["index"],
+            image
+        )
+
+        interpreter.invoke()
+
+        embedding = interpreter.get_tensor(
+            output_details[0]["index"]
+        )[0]
+
+    embedding = embedding.astype(
+        np.float32
+    )
+
+    embedding /= (
+        np.linalg.norm(embedding) + 1e-10
+    )
+
+    return embedding.tolist()
+
+def get_face_document(document_id):
 
     doc = (
         db.collection("known_faces")
@@ -64,19 +194,43 @@ def get_face_document(
 
     return doc
 
-def update_face(
-    document_id: str,
-    new_name: str = None,
-    new_description: str = None,
-    new_embedding: list = None
+def add_new_face(
+    name,
+    description,
+    embedding
 ):
 
-    doc = get_face_document(
-        document_id
-    )
+    doc_ref = db.collection(
+        "known_faces"
+    ).add({
+
+        "name": name,
+
+        "description": description,
+
+        "embeddings": {
+
+            "0": embedding
+
+        }
+
+    })
+
+    return doc_ref[1].id
+
+def update_face(
+    document_id,
+    new_name=None,
+    new_description=None,
+    new_embedding=None
+):
+
+    doc = get_face_document(document_id)
 
     if doc is None:
         return False
+
+    data = doc.to_dict()
 
     update_data = {}
 
@@ -86,221 +240,218 @@ def update_face(
     if new_description:
         update_data["description"] = new_description
 
-    if new_embedding:
-        update_data["embedding"] = new_embedding
+    if new_embedding is not None:
 
-    doc.reference.update(
-        update_data
-    )
+        embeddings = data.get(
+            "embeddings",
+            {}
+        )
+
+        duplicate = False
+
+        for emb in embeddings.values():
+
+            emb = np.array(
+                emb,
+                dtype=np.float32
+            )
+
+            dist = np.linalg.norm(
+                np.array(
+                    new_embedding,
+                    dtype=np.float32
+                ) - emb
+            )
+
+            if dist < DUPLICATE_THRESHOLD:
+
+                duplicate = True
+                break
+
+        if not duplicate:
+
+            index = len(embeddings)
+
+            if index >= MAX_EMBEDDINGS_PER_PERSON:
+
+                embeddings = {
+
+                    str(i): embeddings[str(i + 1)]
+
+                    for i in range(
+                        MAX_EMBEDDINGS_PER_PERSON - 1
+                    )
+
+                }
+
+                index = MAX_EMBEDDINGS_PER_PERSON - 1
+
+            embeddings[str(index)] = new_embedding
+
+        update_data["embeddings"] = embeddings
+
+    doc.reference.update(update_data)
 
     return True
 
 def delete_face(
-    document_id: str
+    document_id
 ):
 
-    doc = (
-        db.collection("known_faces")
-        .document(document_id)
-        .get()
+    doc = get_face_document(
+        document_id
     )
 
-    if not doc.exists:
+    if doc is None:
         return False
 
     doc.reference.delete()
 
     return True
 
-def preprocess_image(image_bytes):
-
-    image = Image.open(io.BytesIO(image_bytes))
-    image = (ImageOps.exif_transpose(image).convert("RGB"))
-    img_np = np.array(image)
-
-    h, w, _ = img_np.shape
-    results = face_detector.process(img_np)
-
-    if not results.detections:
-
-        print(
-            "[MediaPipe] "
-            "No face detected."
-        )
-
-        return None
-
-    bbox = (
-        results
-        .detections[0]
-        .location_data
-        .relative_bounding_box
-    )
-
-    x1 = max(0,int(bbox.xmin * w))
-    y1 = max(0,int(bbox.ymin * h))
-    x2 = min(w,int((bbox.xmin +bbox.width) * w))
-    y2 = min(h,int((bbox.ymin +bbox.height) * h))
-
-    if x2 <= x1 or y2 <= y1:
-
-        print("[MediaPipe] "
-            "Invalid face box."
-        )
-
-        return None
-
-    print(
-        f"[MediaPipe] "
-        f"Face Size: "
-        f"{x2-x1}x{y2-y1}"
-    )
-
-    face = img_np[y1:y2,x1:x2]
-
-    face = cv2.resize(face,(INPUT_SIZE, INPUT_SIZE,),)
-
-    face = face.astype(np.float32)
-
-    face = face / 255.0
-
-    face = np.expand_dims(face,axis=0,)
-
-    return face
-
-
-def get_embedding(image_bytes):
-
-    input_data = preprocess_image(image_bytes)
-
-    if input_data is None:
-
-        return None
-
-    with model_lock:
-
-        interpreter.set_tensor(input_details[0]["index"],input_data,)
-
-        interpreter.invoke()
-
-        embedding = (interpreter.get_tensor(output_details[0]["index"])[0])
-
-    norm = np.linalg.norm(embedding)
-
-    embedding = (embedding /(norm + 1e-7))
-
-    return embedding.tolist()
-
-
 def find_matching_person(new_embedding):
 
-    users = db.collection("known_faces").stream()
+    users = db.collection(
+        "known_faces"
+    ).stream()
 
-    best_dist = float("inf")
+    new_embedding = np.array(
+        new_embedding,
+        dtype=np.float32
+    )
 
-    best_name = None
-
-    best_description = None
-
-    best_doc_id = None
-
-    new_emb_np = np.array(new_embedding)
+    best_distance = float("inf")
+    best_doc = None
 
     for doc in users:
 
         data = doc.to_dict()
 
-        known_emb = np.array(data.get("embedding"))
+        embeddings = data.get(
+            "embeddings",
+            {}
+        )
 
-        dist = np.linalg.norm(new_emb_np - known_emb)
+        if len(embeddings) == 0:
+            continue
 
-        if dist < best_dist:
+        person_best_distance = float("inf")
 
-            best_dist = dist
+        for emb in embeddings.values():
 
-            best_name = data.get("name")
-
-            best_description = data.get(
-                "description",
-                "No description",
+            emb = np.array(
+                emb,
+                dtype=np.float32
             )
 
-            best_doc_id = doc.id
+            distance = np.linalg.norm(
+                new_embedding - emb
+            )
 
-    print(
-        f"[Matching] "
-        f"Closest Name: "
-        f"{best_name}, "
-        f"Distance: "
-        f"{best_dist:.4f}"
-    )
+            if distance < person_best_distance:
 
-    if (best_name and best_dist < SIMILARITY_THRESHOLD):
+                person_best_distance = distance
+
+        if person_best_distance < best_distance:
+
+            best_distance = person_best_distance
+            best_doc = doc
+
+    if best_doc is None:
 
         return {
+
+            "matched": False,
+
+            "name": None,
+
+            "distance": None
+
+        }
+
+    data = best_doc.to_dict()
+
+    if best_distance <= SIMILARITY_THRESHOLD:
+
+        return {
+
             "matched": True,
-            "document_id": best_doc_id,
-            "name": best_name,
-            "description": best_description,
-            "distance": float(best_dist),
+
+            "document_id": best_doc.id,
+
+            "name": data.get("name"),
+
+            "description": data.get(
+                "description",
+                ""
+            ),
+
+            "distance": float(best_distance)
+
         }
 
     return {
 
         "matched": False,
 
-        "name":
-            best_name
-            if best_name
-            else "None",
+        "name": data.get("name"),
 
-        "distance":
-            float(best_dist)
-            if best_dist != float("inf")
-            else None,
+        "distance": float(best_distance)
+
     }
 
 def face_exists(new_embedding):
 
-    users = db.collection("known_faces").stream()
+    users = db.collection(
+        "known_faces"
+    ).stream()
 
-    new_emb_np = np.array(new_embedding)
+    new_embedding = np.array(
+        new_embedding,
+        dtype=np.float32
+    )
 
     for doc in users:
 
         data = doc.to_dict()
 
-        known_emb = np.array(data.get("embedding"))
+        embeddings = data.get(
+            "embeddings",
+            {}
+        )
 
-        dist = np.linalg.norm(new_emb_np - known_emb)
+        for emb in embeddings.values():
 
-        if dist < SIMILARITY_THRESHOLD:
+            emb = np.array(
+                emb,
+                dtype=np.float32
+            )
 
-            return {
-                "exists": True,
-                "document_id": doc.id,
-                "name": data.get("name"),
-                "distance": float(dist)
-            }
+            distance = np.linalg.norm(
+                new_embedding - emb
+            )
+
+            if distance <= SIMILARITY_THRESHOLD:
+
+                return {
+
+                    "exists": True,
+
+                    "document_id": doc.id,
+
+                    "name": data.get("name"),
+
+                    "distance": float(distance)
+
+                }
 
     return {
+
         "exists": False
+
     }
 
-def add_new_face(name, description, embedding):
-
-    doc_ref = db.collection("known_faces").add({
-        "name": name,
-        "description": description,
-        "embedding": embedding,
-    })
-
-    return doc_ref[1].id
-
-@router.post(
-    "/face-recognition/recognize-face"
-)
-
+@router.post("/face-recognition/recognize-face")
 async def recognize_face(
     file: UploadFile = File(...)
 ):
@@ -309,244 +460,370 @@ async def recognize_face(
 
         image_bytes = await file.read()
 
-        embedding = (await run_in_threadpool(get_embedding, image_bytes,))
+        embedding = await run_in_threadpool(
+            get_embedding,
+            image_bytes
+        )
 
         if embedding is None:
 
             return {
 
-                "status":
-                    "no_face",
+                "status": "no_face",
 
-                "message":
-                    "No face detected",
+                "message": "No face detected"
+
             }
 
-        result = (await run_in_threadpool(find_matching_person,embedding,))
+        result = await run_in_threadpool(
+            find_matching_person,
+            embedding
+        )
 
         if result["matched"]:
 
             return {
 
-                "status":
-                    "known",
+                "status": "known",
 
-                "document_id":
-                    result["document_id"],
+                "document_id": result["document_id"],
 
-                "name":
-                    result["name"],
+                "name": result["name"],
 
-                "description":
-                    result["description"],
+                "description": result["description"],
 
-                "distance":
+                "distance": round(
                     result["distance"],
+                    4
+                )
+
             }
 
         return {
 
-            "status":
-                "unknown",
+            "status": "unknown",
 
-            "message":
-                "Face not recognized",
+            "message": "Face not recognized",
 
-            "closest_name":
-                result["name"],
+            "closest_name": result["name"],
 
-            "distance":
-                result[
-                    "distance"
-                ],
+            "distance": (
+                round(result["distance"], 4)
+                if result["distance"] is not None
+                else None
+            )
+
         }
 
     except FileNotFoundError:
+
         return JSONResponse(
+
             status_code=404,
+
             content={
+
                 "status": "error",
+
                 "errorCode": "FILE_NOT_FOUND",
+
                 "message": "Required file not found"
+
             }
+
         )
 
     except ValueError:
+
         return JSONResponse(
+
             status_code=400,
+
             content={
+
                 "status": "error",
+
                 "errorCode": "INVALID_IMAGE",
-                "message": "Invalid image format"
+
+                "message": "Invalid image"
+
             }
+
         )
 
-    except Exception:
+    except Exception as e:
+
+        print(e)
+
         return JSONResponse(
+
             status_code=500,
+
             content={
+
                 "status": "error",
+
                 "errorCode": "INTERNAL_SERVER_ERROR",
-                "message": "Unexpected server error"
+
+                "message": str(e)
+
             }
+
         )
 
-@router.post(
-    "/face-recognition/save-new-face"
-)
-
-async def save_new_face(name: str = Form(...), description: str = Form(...), file: UploadFile = File(...),):
+@router.post("/face-recognition/save-new-face")
+async def save_new_face(
+    name: str = Form(...),
+    description: str = Form(...),
+    file: UploadFile = File(...)
+):
 
     try:
 
         image_bytes = await file.read()
 
-        embedding = (await run_in_threadpool(get_embedding, image_bytes,))
+        embedding = await run_in_threadpool(
+            get_embedding,
+            image_bytes
+        )
 
         if embedding is None:
 
             return {
 
-                "status":
-                    "no_face",
+                "status": "no_face",
 
-                "message":
-                    "No face detected",
+                "message": "No face detected"
+
             }
-        
-        existing_face = await run_in_threadpool(face_exists,embedding)
+
+        existing_face = await run_in_threadpool(
+            face_exists,
+            embedding
+        )
 
         if existing_face["exists"]:
 
             return JSONResponse(
+
                 status_code=409,
+
                 content={
+
                     "status": "already_exists",
+
                     "document_id": existing_face["document_id"],
+
                     "name": existing_face["name"],
-                    "message": "Face already exists in database"
+
+                    "distance": round(
+                        existing_face["distance"],
+                        4
+                    ),
+
+                    "message": "Face already exists"
+
                 }
+
             )
 
-        doc_id = await run_in_threadpool(
+        document_id = await run_in_threadpool(
+
             add_new_face,
+
             name,
+
             description,
-            embedding,
-        )
 
-        print(
-            f"[Database] "
-            f"Saved: {name}"
-        )
+            embedding
 
-        print(
-            f"Description: "
-            f"{description}"
         )
 
         return {
 
-            "status":
-                "saved",
-            
-            "document_id": doc_id,
+            "status": "saved",
 
-            "message":
-                f"{name} "
-                f"registered successfully",
+            "document_id": document_id,
+
+            "message": f"{name} registered successfully"
+
         }
-    
+
     except FileNotFoundError:
+
         return JSONResponse(
+
             status_code=404,
+
             content={
+
                 "status": "error",
+
                 "errorCode": "FILE_NOT_FOUND",
+
                 "message": "Required file not found"
+
             }
+
         )
 
     except ValueError:
+
         return JSONResponse(
+
             status_code=400,
+
             content={
+
                 "status": "error",
+
                 "errorCode": "INVALID_IMAGE",
-                "message": "Invalid image format"
+
+                "message": "Invalid image"
+
             }
+
         )
 
-    except Exception:
+    except Exception as e:
+
+        print(e)
+
         return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "errorCode": "DATABASE_ERROR",
-                "message": "Unable to save face data"
-            }
-        )
-@router.put("/face-recognition/update-face")
 
+            status_code=500,
+
+            content={
+
+                "status": "error",
+
+                "errorCode": "DATABASE_ERROR",
+
+                "message": str(e)
+
+            }
+
+        )
+    
+@router.put("/face-recognition/update-face")
 async def update_known_face(
+
     document_id: str = Form(...),
+
     new_name: str = Form(None),
+
     new_description: str = Form(None),
+
     file: UploadFile = File(None)
+
 ):
 
     try:
 
         new_embedding = None
 
-        if file:
+        if file is not None:
 
             image_bytes = await file.read()
 
             new_embedding = await run_in_threadpool(
+
                 get_embedding,
+
                 image_bytes
+
             )
 
             if new_embedding is None:
 
                 return {
+
                     "status": "no_face",
+
                     "message": "No face detected"
+
                 }
 
         updated = await run_in_threadpool(
+
             update_face,
+
             document_id,
+
             new_name,
+
             new_description,
+
             new_embedding
+
         )
 
         if not updated:
 
             return {
+
                 "status": "not_found",
+
                 "message": "Person not found"
+
             }
+
+        doc = await run_in_threadpool(
+
+            get_face_document,
+
+            document_id
+
+        )
+
+        data = doc.to_dict()
 
         return {
+
             "status": "updated",
+
+            "document_id": document_id,
+
+            "name": data.get("name"),
+
+            "description": data.get("description"),
+
+            "total_embeddings": len(
+
+                data.get(
+
+                    "embeddings", 
+                    {}
+
+                )
+
+            ),
+
             "message": "Face updated successfully"
+
         }
 
-    except Exception:
+    except Exception as e:
+
+        print(e)
 
         return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "message": "Failed to update face"
-            }
-        )
-    
-@router.delete("/face-recognition/delete-face")
 
+            status_code=500,
+
+            content={
+
+                "status": "error",
+
+                "errorCode": "UPDATE_ERROR",
+
+                "message": str(e)
+
+            }
+
+        )
+
+@router.delete("/face-recognition/delete-face")
 async def remove_face(
     document_id: str
 ):
@@ -554,28 +831,49 @@ async def remove_face(
     try:
 
         deleted = await run_in_threadpool(
+
             delete_face,
+
             document_id
+
         )
 
         if not deleted:
 
             return {
+
                 "status": "not_found",
+
                 "message": "Person not found"
+
             }
 
         return {
+
             "status": "deleted",
+
+            "document_id": document_id,
+
             "message": "Person deleted successfully"
+
         }
 
-    except Exception:
+    except Exception as e:
+
+        print(e)
 
         return JSONResponse(
+
             status_code=500,
+
             content={
+
                 "status": "error",
-                "message": "Failed to delete face"
+
+                "errorCode": "DELETE_ERROR",
+
+                "message": str(e)
+
             }
+
         )
