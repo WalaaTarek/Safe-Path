@@ -9,6 +9,8 @@ import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:Safepath/config/api_config.dart';
+import 'package:Safepath/services/language_manager.dart';
+import 'package:Safepath/services/language_string.dart';
 
 class FaceRecognitionScreen extends StatefulWidget {
   final List<CameraDescription> cameras;
@@ -29,8 +31,8 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
   Timer? recognitionTimer;
   bool isProcessing = false;
   bool isVoiceInteracting = false;
-  String detectedName = "Scanning Face...";
-  String status = "Safe-Path Active";
+  String detectedName = "";
+  String status = "";
 
   final String baseUrl = ApiConfig.baseUrl;
 
@@ -38,6 +40,8 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    detectedName = LanguageStrings.get("scanningFace");
+    status = LanguageStrings.get("active");
     initTts();
     initSpeech();
     initCamera();
@@ -48,7 +52,7 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
   }
 
   Future<void> initTts() async {
-    await flutterTts.setLanguage("en-US");
+    await flutterTts.setLanguage(LanguageManager.isArabic ? "ar" : "en-US");
     await flutterTts.setSpeechRate(0.5);
   }
 
@@ -123,6 +127,7 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
     if (!available) return "";
 
     speech.listen(
+      localeId: LanguageManager.isArabic ? "ar-EG" : "en-US",
       listenFor: const Duration(seconds: 5),
       pauseFor: const Duration(seconds: 3),
       onResult: (result) {
@@ -146,72 +151,45 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
 
   Future<void> handleUnknownFace(Uint8List imageBytes) async {
     isVoiceInteracting = true;
-
     recognitionTimer?.cancel();
 
     if (mounted) {
       setState(() {
-        detectedName = "Unknown Face";
-
-        status = "Voice prompt active...";
+        detectedName = LanguageStrings.get("unknownFace");
+        status = LanguageStrings.get("voiceActive");
       });
     }
 
-    await speak(
-      "I don't recognize this person. "
-      "Would you like to save this face?"
-      "Say yes or no.",
-    );
-
+    await speak(LanguageStrings.get("askSaveFace"));
     String answer = await listenOnce();
 
-    debugPrint("User Answer: $answer");
-
-    if (answer.contains("yes") || answer.contains("yeah")) {
-      await speak("Please tell me the person's name.");
-
+    if (answer.contains("yes") ||
+        answer.contains("yeah") ||
+        answer.contains("نعم") ||
+        answer.contains("ايوه")) {
+      await speak(LanguageStrings.get("askName"));
       String personName = await listenOnce();
 
-      debugPrint(
-        "Person Name Captured: "
-        "$personName",
-      );
-
       if (personName.isEmpty) {
-        await speak(
-          "Sorry, I couldn't hear the name clearly. Please try again.",
-        );
-
+        await speak(LanguageStrings.get("errorHearName"));
         isVoiceInteracting = false;
-
         startRecognitionLoop();
-
         return;
       }
 
-      await speak(
-        "Please provide a short description "
-        "for this person.",
-      );
-
+      await speak(LanguageStrings.get("askDescription"));
       String description = await listenOnce();
 
-      debugPrint(
-        "Description Captured: "
-        "$description",
-      );
-
       if (description.isEmpty) {
-        description = "No description";
+        description = LanguageStrings.get("noDescription");
       }
 
       await savePerson(personName, description, imageBytes);
     } else {
-      await speak("Person not saved.");
+      await speak(LanguageStrings.get("notSaved"));
     }
 
     isVoiceInteracting = false;
-
     startRecognitionLoop();
   }
 
@@ -221,141 +199,114 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
     String description,
   ) async {
     isVoiceInteracting = true;
-
     recognitionTimer?.cancel();
 
-    await speak("$personName recognized.");
-
     await speak(
-      "Would you like to edit or delete this person? "
-      "Say edit, delete, or no.",
+      LanguageManager.isArabic
+          ? "تم التعرف على $personName"
+          : "$personName ${LanguageStrings.get("recognized")}",
     );
-
+    await speak(LanguageStrings.get("askAction"));
     String action = await listenOnce();
 
-    debugPrint("Action: $action");
-
-    if (action.contains("edit")) {
-      await speak("Would you like to edit name or description?");
-
+    if (action.contains("edit") || action.contains("تعديل")) {
+      await speak(LanguageStrings.get("askEditChoice"));
       String choice = await listenOnce();
 
-      if (choice.contains("name")) {
-        await speak("Please say the new name.");
-
+      if (choice.contains("name") || choice.contains("الاسم")) {
+        await speak(LanguageStrings.get("askNewName"));
         String newName = await listenOnce();
 
         if (newName.isNotEmpty) {
           await updatePerson(documentId, newName, "");
-
           if (mounted) {
             setState(() {
               detectedName = newName;
-              status = "Name Updated";
+              status = LanguageStrings.get("nameUpdated");
             });
           }
         }
-      } else if (choice.contains("description")) {
-        await speak("Please say the new description.");
-
+      } else if (choice.contains("description") || choice.contains("الوصف")) {
+        await speak(LanguageStrings.get("askNewDescription"));
         String newDescription = await listenOnce();
 
         if (newDescription.isNotEmpty) {
           await updatePerson(documentId, "", newDescription);
-
           if (mounted) {
             setState(() {
-              status = "Description Updated";
+              status = LanguageStrings.get("descriptionUpdated");
             });
           }
         }
       } else {
-        await speak("Invalid option.");
+        await speak(LanguageStrings.get("invalidOption"));
       }
-    } else if (action.contains("delete")) {
+    } else if (action.contains("delete") || action.contains("حذف")) {
       await speak(
-        "Are you sure you want to delete "
-        "$personName ? "
-        "Say yes or no.",
+        LanguageManager.isArabic
+            ? "هل أنت متأكد أنك تريد حذف $personName ؟ قل نعم أو لا."
+            : "${LanguageStrings.get("askDeleteConfirm")} $personName ?",
       );
-
       String confirm = await listenOnce();
 
-      if (confirm.contains("yes")) {
+      if (confirm.contains("yes") ||
+          confirm.contains("نعم") ||
+          confirm.contains("ايوه")) {
         await deletePerson(documentId);
-
         if (mounted) {
           setState(() {
-            detectedName = "Deleted";
-            status = "$personName removed";
+            detectedName = LanguageStrings.get("deleted");
+            status = LanguageManager.isArabic
+                ? "تم إزالة $personName"
+                : "$personName ${LanguageStrings.get("removed")}";
           });
         }
       } else {
-        await speak("Delete cancelled.");
+        await speak(LanguageStrings.get("deleteCancelled"));
       }
     } else {
-      await speak("Okay.");
+      await speak(LanguageStrings.get("okay"));
     }
 
     isVoiceInteracting = false;
-
     startRecognitionLoop();
   }
 
   Future<void> savePerson(
     String name,
-
     String description,
-
     Uint8List bytes,
   ) async {
     try {
       var request = http.MultipartRequest(
         "POST",
-
         Uri.parse("$baseUrl/face-recognition/save-new-face"),
       );
 
       request.fields["name"] = name;
-
       request.fields["description"] = description;
-
       request.files.add(
         http.MultipartFile.fromBytes("file", bytes, filename: "face.jpg"),
       );
 
       var response = await request.send();
-
-      var responseString = await response.stream.bytesToString();
-
-      debugPrint(
-        "Save Response: "
-        "$responseString",
-      );
-
       if (response.statusCode == 200) {
         if (mounted) {
           setState(() {
             detectedName = name;
-
-            status = "Saved Successfully";
+            status = LanguageStrings.get("saveSuccess");
           });
         }
-
-        await speak("$name has been saved successfully.");
-      } else {
         await speak(
-          "Failed to save person "
-          "on the server.",
+          LanguageManager.isArabic
+              ? "تم حفظ $name بنجاح."
+              : "$name ${LanguageStrings.get("saveSuccess")}",
         );
+      } else {
+        await speak(LanguageStrings.get("saveFailed"));
       }
     } catch (e) {
-      debugPrint("Save Error: $e");
-
-      await speak(
-        "Error while communicating "
-        "with the server.",
-      );
+      await speak(LanguageStrings.get("connectionError"));
     }
   }
 
@@ -365,14 +316,12 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
         _isControllerDisposed) {
       return;
     }
-
     if (isProcessing || isVoiceInteracting) {
       return;
     }
 
     try {
       isProcessing = true;
-
       final XFile file = await controller!.takePicture();
       Uint8List bytes = await file.readAsBytes();
 
@@ -393,11 +342,7 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
       );
 
       var response = await request.send().timeout(const Duration(seconds: 7));
-
       var responseString = await response.stream.bytesToString();
-
-      debugPrint("Server Raw Response: $responseString");
-
       var data = jsonDecode(responseString);
 
       if (!mounted || isVoiceInteracting) return;
@@ -407,21 +352,18 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
 
         if (resStatus == "no_face") {
           setState(() {
-            detectedName = "Scanning...";
-            status = "No face detected in frame";
+            detectedName = LanguageStrings.get("scanningFace");
+            status = LanguageStrings.get("noFaceFrame");
           });
-
           return;
         } else if (resStatus == "known") {
           String documentId = data["document_id"];
-
           String personName = data["name"];
-
           String description = data["description"] ?? "";
 
           setState(() {
             detectedName = personName;
-            status = "Verified: $personName";
+            status = "${LanguageStrings.get("verified")}: $personName";
           });
 
           await handleKnownFace(documentId, personName, description);
@@ -430,7 +372,7 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
         }
       } else {
         setState(() {
-          detectedName = "Server Error";
+          detectedName = LanguageStrings.get("serverError");
           status = "Code: ${response.statusCode}";
         });
       }
@@ -453,26 +395,21 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
       );
 
       request.fields["document_id"] = documentId;
-
       if (newName.isNotEmpty) {
         request.fields["new_name"] = newName;
       }
-
       if (newDescription.isNotEmpty) {
         request.fields["new_description"] = newDescription;
       }
 
       var response = await request.send();
-
       if (response.statusCode == 200) {
-        await speak("Person updated successfully");
+        await speak(LanguageStrings.get("updateSuccess"));
       } else {
-        await speak("Failed to update person");
+        await speak(LanguageStrings.get("updateFailed"));
       }
     } catch (e) {
-      debugPrint("Update Error: $e");
-
-      await speak("Error updating person");
+      await speak(LanguageStrings.get("connectionError"));
     }
   }
 
@@ -485,14 +422,12 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
       );
 
       if (response.statusCode == 200) {
-        await speak("Person deleted successfully");
+        await speak(LanguageStrings.get("deleteSuccess"));
       } else {
-        await speak("Failed to delete person");
+        await speak(LanguageStrings.get("connectionError"));
       }
     } catch (e) {
-      debugPrint("Delete Error: $e");
-
-      await speak("Error deleting person");
+      await speak(LanguageStrings.get("connectionError"));
     }
   }
 
@@ -522,7 +457,6 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
   }
 
   @override
-  @override
   Widget build(BuildContext context) {
     if (controller == null ||
         !controller!.value.isInitialized ||
@@ -544,13 +478,14 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen>
       body: Stack(
         children: [
           SizedBox.expand(child: CameraPreview(controller!)),
-
           Positioned(
             bottom: bottomPadding,
             left: 16,
             right: 16,
             child: Semantics(
-              label: detectedName.isEmpty ? "Scanning Face" : detectedName,
+              label: detectedName.isEmpty
+                  ? LanguageStrings.get("scanningFace")
+                  : detectedName,
               liveRegion: true,
               child: Container(
                 padding: const EdgeInsets.all(14),

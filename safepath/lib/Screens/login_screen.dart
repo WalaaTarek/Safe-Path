@@ -7,6 +7,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 
 import 'package:Safepath/services/language_manager.dart';
 import 'package:Safepath/services/language_string.dart';
+import 'package:Safepath/config/api_config.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -65,7 +66,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse("http://192.168.1.4:8000/login"),
+        Uri.parse(ApiConfig.login),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "email": emailController.text,
