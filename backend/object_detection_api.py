@@ -413,7 +413,6 @@ async def process_voice_command(
 
             }
 
-        # فتح الشاشات
 
         if (
             "go to" in command_text
@@ -488,9 +487,6 @@ async def process_voice_command(
         target_object = None
 
 
-
-        # البحث عن اسم الشيء الذي طلبه المستخدم
-
         for key in model.names.values():
 
             if key.lower() in command_text:
@@ -500,8 +496,6 @@ async def process_voice_command(
                 break
 
 
-
-        # البحث بالعربي
 
         if target_object is None and language == "ar":
 
